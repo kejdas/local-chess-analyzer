@@ -1,0 +1,1 @@
+# local-chess-analyzer

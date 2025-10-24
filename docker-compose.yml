@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  # Backendu (FastAPI)
+  backend:
+    build:
+      context: ./backend
+    hostname: backend
+    volumes:
+      - ./data:/app/data
+      - ./stockfish:/app/stockfish
+    restart: unless-stopped
+    ports:
+      - "42069:42069"
+
+  # Frontend (Svelte + Nginx)
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "69420:69420"
+    depends_on:
+      - backend
+    restart: unless-stopped
