@@ -71,8 +71,22 @@ export async function getSyncStatus() {
 }
 
 // Games API
-export async function getGames(skip = 0, limit = 100) {
-  return apiFetch(`/api/games?skip=${skip}&limit=${limit}`);
+export async function getGames(skip = 0, limit = 100, filters = {}, sort = {}) {
+  const params = new URLSearchParams({
+    skip: skip.toString(),
+    limit: limit.toString()
+  });
+
+  // Add optional filters
+  if (filters.date_from) params.append('date_from', filters.date_from);
+  if (filters.date_to) params.append('date_to', filters.date_to);
+  if (filters.status) params.append('status', filters.status);
+
+  // Add sorting
+  if (sort.sort_by) params.append('sort_by', sort.sort_by);
+  if (sort.sort_order) params.append('sort_order', sort.sort_order);
+
+  return apiFetch(`/api/games?${params.toString()}`);
 }
 
 export async function getGamesStats() {

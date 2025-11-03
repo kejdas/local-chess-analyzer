@@ -100,37 +100,92 @@ async def bulk_create_games(db: AsyncSession, games_data: List[Dict[str, Any]]) 
     }
 
 
-async def get_all_games(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[Game]:
+async def get_all_games(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: str = 'date',
+    sort_order: str = 'desc'
+) -> List[Game]:
     """
-    Get all games with pagination.
+    Get all games with pagination, filters, and sorting.
 
     Args:
         db: Database session
         skip: Number of records to skip
         limit: Maximum number of records to return
+        date_from: Filter games from this date (format: YYYY.MM.DD)
+        date_to: Filter games to this date (format: YYYY.MM.DD)
+        status: Filter by analysis status
+        sort_by: Field to sort by (date/result/status)
+        sort_order: Sort order (asc/desc)
 
     Returns:
         List of Game objects
     """
-    result = await db.execute(
-        select(Game).offset(skip).limit(limit).order_by(Game.import_date.desc())
-    )
+    query = select(Game)
+
+    # Apply filters
+    if date_from:
+        query = query.where(Game.game_date >= date_from)
+    if date_to:
+        query = query.where(Game.game_date <= date_to)
+    if status:
+        query = query.where(Game.analysis_status == status)
+
+    # Apply sorting
+    sort_column = Game.game_date  # Default
+    if sort_by == 'result':
+        sort_column = Game.result
+    elif sort_by == 'status':
+        sort_column = Game.analysis_status
+    elif sort_by == 'date':
+        sort_column = Game.game_date
+
+    if sort_order == 'asc':
+        query = query.order_by(sort_column.asc())
+    else:
+        query = query.order_by(sort_column.desc())
+
+    # Apply pagination
+    query = query.offset(skip).limit(limit)
+
+    result = await db.execute(query)
     return result.scalars().all()
 
 
-async def get_games_count(db: AsyncSession) -> int:
+async def get_games_count(
+    db: AsyncSession,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None
+) -> int:
     """
-    Get total count of games in the database.
+    Get total count of games in the database with optional filters.
 
     Args:
         db: Database session
+        date_from: Filter games from this date (format: YYYY.MM.DD)
+        date_to: Filter games to this date (format: YYYY.MM.DD)
+        status: Filter by analysis status
 
     Returns:
-        Total number of games
+        Total number of games matching filters
     """
-    result = await db.execute(
-        select(func.count(Game.id))
-    )
+    query = select(func.count(Game.id))
+
+    # Apply filters
+    if date_from:
+        query = query.where(Game.game_date >= date_from)
+    if date_to:
+        query = query.where(Game.game_date <= date_to)
+    if status:
+        query = query.where(Game.analysis_status == status)
+
+    result = await db.execute(query)
     return result.scalar()
 
 

@@ -41,14 +41,24 @@ class GamesListResponse(BaseModel):
 async def get_games(
     skip: int = 0,
     limit: int = 100,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: Optional[str] = 'date',
+    sort_order: Optional[str] = 'desc',
     db: AsyncSession = Depends(get_db_session)
 ):
     """
-    Get paginated list of games.
+    Get paginated list of games with optional filters and sorting.
 
     Args:
         skip: Number of games to skip (for pagination)
         limit: Maximum number of games to return (max 1000)
+        date_from: Filter games from this date (format: YYYY-MM-DD)
+        date_to: Filter games to this date (format: YYYY-MM-DD)
+        status: Filter by analysis status (queued/analyzing/completed)
+        sort_by: Field to sort by (date/result/status)
+        sort_order: Sort order (asc/desc)
 
     Returns:
         List of games with pagination metadata
@@ -56,8 +66,26 @@ async def get_games(
     if limit > 1000:
         limit = 1000
 
-    games = await crud_games.get_all_games(db, skip=skip, limit=limit)
-    total = await crud_games.get_games_count(db)
+    # Convert date format from YYYY-MM-DD to YYYY.MM.DD for database comparison
+    date_from_db = date_from.replace('-', '.') if date_from else None
+    date_to_db = date_to.replace('-', '.') if date_to else None
+
+    games = await crud_games.get_all_games(
+        db,
+        skip=skip,
+        limit=limit,
+        date_from=date_from_db,
+        date_to=date_to_db,
+        status=status,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    total = await crud_games.get_games_count(
+        db,
+        date_from=date_from_db,
+        date_to=date_to_db,
+        status=status
+    )
 
     return GamesListResponse(
         games=games,
