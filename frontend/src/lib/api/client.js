@@ -92,3 +92,58 @@ export async function getGames(skip = 0, limit = 100, filters = {}, sort = {}) {
 export async function getGamesStats() {
   return apiFetch('/api/games/stats');
 }
+
+// Database Management API
+export async function clearDatabase() {
+  return apiFetch('/api/database/clear', {
+    method: 'DELETE',
+  });
+}
+
+export async function downloadDatabase() {
+  try {
+    const url = `${API_BASE_URL}/api/database/download`;
+    console.log('[API Client] Downloading database from:', url);
+
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'games.db';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[API Client] Download failed:', error);
+    throw error;
+  }
+}
+
+export async function uploadDatabase(file) {
+  try {
+    console.log('[API Client] Uploading database file:', file.name);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/api/database/upload`, {
+      method: 'POST',
+      body: formData,
+      // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('[API Client] Upload error:', response.status, error);
+      throw new Error(`Upload failed: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    console.log('[API Client] Upload success:', data);
+    return data;
+  } catch (error) {
+    console.error('[API Client] Upload failed:', error);
+    throw error;
+  }
+}

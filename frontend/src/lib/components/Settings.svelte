@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { getSettings, updateSettings } from '../api/client.js';
+  import { getSettings, updateSettings, clearDatabase, downloadDatabase, uploadDatabase } from '../api/client.js';
 
   let settings = {
     chess_com_username: '',
@@ -17,6 +17,10 @@
   let saving = false;
   let error = null;
   let successMessage = null;
+
+  // Database management state
+  let dbOperationInProgress = false;
+  let fileInput;
 
   async function loadSettings() {
     loading = true;
@@ -48,6 +52,89 @@
       console.error('Failed to save settings:', err);
     } finally {
       saving = false;
+    }
+  }
+
+  async function handleClearDatabase() {
+    if (!confirm('⚠️ WARNING: This will delete ALL games from the database!\n\nSettings will be preserved, but all imported games will be removed.\n\nThis action cannot be undone. Are you sure?')) {
+      return;
+    }
+
+    dbOperationInProgress = true;
+    error = null;
+    successMessage = null;
+
+    try {
+      const result = await clearDatabase();
+      successMessage = result.message;
+      setTimeout(() => {
+        successMessage = null;
+      }, 5000);
+    } catch (err) {
+      error = 'Failed to clear database: ' + err.message;
+      console.error('Failed to clear database:', err);
+    } finally {
+      dbOperationInProgress = false;
+    }
+  }
+
+  async function handleDownloadDatabase() {
+    dbOperationInProgress = true;
+    error = null;
+    successMessage = null;
+
+    try {
+      await downloadDatabase();
+      successMessage = 'Database download started!';
+      setTimeout(() => {
+        successMessage = null;
+      }, 3000);
+    } catch (err) {
+      error = 'Failed to download database: ' + err.message;
+      console.error('Failed to download database:', err);
+    } finally {
+      dbOperationInProgress = false;
+    }
+  }
+
+  function handleUploadClick() {
+    fileInput.click();
+  }
+
+  async function handleFileSelected(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.db')) {
+      error = 'Please select a .db file';
+      return;
+    }
+
+    if (!confirm(`⚠️ WARNING: This will replace your current database with "${file.name}"!\n\nYour current database will be backed up, but all data will be replaced.\n\nAre you sure you want to continue?`)) {
+      fileInput.value = ''; // Reset file input
+      return;
+    }
+
+    dbOperationInProgress = true;
+    error = null;
+    successMessage = null;
+
+    try {
+      const result = await uploadDatabase(file);
+      successMessage = result.message;
+      setTimeout(() => {
+        successMessage = null;
+      }, 5000);
+      // Reload page to reflect new database
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (err) {
+      error = 'Failed to upload database: ' + err.message;
+      console.error('Failed to upload database:', err);
+    } finally {
+      dbOperationInProgress = false;
+      fileInput.value = ''; // Reset file input
     }
   }
 
@@ -207,6 +294,51 @@
         </button>
       </div>
     </form>
+
+    <!-- Database Management Section (outside of form) -->
+    <div class="settings-section database-section">
+      <h2>Database Management</h2>
+      <p class="section-description">
+        Manage your games database. You can backup, restore, or clear all game data.
+      </p>
+
+      <div class="database-actions">
+        <button
+          type="button"
+          class="btn btn-success"
+          on:click={handleDownloadDatabase}
+          disabled={dbOperationInProgress}
+        >
+          📥 Download Database
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-warning"
+          on:click={handleUploadClick}
+          disabled={dbOperationInProgress}
+        >
+          📤 Upload Database
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-danger"
+          on:click={handleClearDatabase}
+          disabled={dbOperationInProgress}
+        >
+          🗑️ Clear All Games
+        </button>
+      </div>
+
+      <input
+        type="file"
+        accept=".db"
+        bind:this={fileInput}
+        on:change={handleFileSelected}
+        style="display: none;"
+      />
+    </div>
   {/if}
 </div>
 
@@ -341,5 +473,53 @@
 
   .btn-secondary:hover:not(:disabled) {
     background: #7f8c8d;
+  }
+
+  .btn-success {
+    background: #27ae60;
+    color: white;
+  }
+
+  .btn-success:hover:not(:disabled) {
+    background: #229954;
+  }
+
+  .btn-warning {
+    background: #f39c12;
+    color: white;
+  }
+
+  .btn-warning:hover:not(:disabled) {
+    background: #e67e22;
+  }
+
+  .btn-danger {
+    background: #e74c3c;
+    color: white;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: #c0392b;
+  }
+
+  .database-section {
+    margin-top: 2rem;
+  }
+
+  .section-description {
+    color: #666;
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+  }
+
+  .database-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .database-actions .btn {
+    flex: 1;
+    min-width: 200px;
   }
 </style>
