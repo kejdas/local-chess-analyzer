@@ -842,7 +842,7 @@ After every change, test:
 
 ### Documentation Files
 ```
-/root/docker/local-chess-analyzer/
+/root/docker/local-chess-analyzer/notes/
 ├── README.md                    # Project overview
 ├── Summary 30.10.2025.md        # Steps 4-6 session log
 ├── Summary 03.11.2025.md        # Step 7 session log (games list)
@@ -850,7 +850,7 @@ After every change, test:
 ├── Step 4 - completed.md        # Frontend implementation
 ├── Step 5 - completed.md        # Resource detection
 ├── Step 6 - completed.md        # Setup wizard
-└── PROJECT_CONTEXT.md           # This file
+└── PROJECT_CONTEXT.md           # This file is in /root/docker/local-chess-analyzer/
 ```
 
 ### External Docs
