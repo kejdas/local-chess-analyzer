@@ -1,11 +1,12 @@
 <script>
   import { location } from 'svelte-spa-router';
   import active from 'svelte-spa-router/active';
+  import logo from '../../assets/logo.png';
 </script>
 
 <header>
   <div class="container">
-    <h1 class="logo">Chess Analyzer</h1>
+    <h1 class="logo"><img src={logo} alt="Logo"></h1>
     <nav>
       <a href="#/" use:active>Home</a>
       <a href="#/settings" use:active>Settings</a>
@@ -34,8 +35,14 @@
 
   .logo {
     margin: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
+    display: flex;
+    align-items: center;
+  }
+
+  .logo img {
+    height: 40px;
+    width: auto;
+    display: block;
   }
 
   nav {

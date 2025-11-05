@@ -983,3 +983,4 @@ docker compose restart frontend
 ---
 
 **END OF AI AGENT CONTEXT GUIDE**
+

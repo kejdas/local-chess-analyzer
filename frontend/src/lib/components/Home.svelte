@@ -29,7 +29,7 @@
 </script>
 
 <div class="home">
-  <h1>Chess Analyzer Dashboard</h1>
+  <h1>Dashboard</h1>
 
   {#if loading}
     <div class="loading">Loading dashboard data...</div>
