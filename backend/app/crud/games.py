@@ -5,6 +5,23 @@ from ..db.models import Game
 from typing import List, Dict, Any, Optional
 
 
+async def get_game_by_id(db: AsyncSession, game_id: int) -> Optional[Game]:
+    """
+    Get a game by its database ID.
+
+    Args:
+        db: Database session
+        game_id: Database ID of the game
+
+    Returns:
+        Game object if found, None otherwise
+    """
+    result = await db.execute(
+        select(Game).where(Game.id == game_id)
+    )
+    return result.scalars().first()
+
+
 async def get_game_by_chess_com_id(db: AsyncSession, chess_com_id: str) -> Optional[Game]:
     """
     Get a game by its Chess.com ID.
@@ -204,3 +221,35 @@ async def get_games_by_analysis_status(db: AsyncSession, status: str) -> List[Ga
         select(Game).where(Game.analysis_status == status)
     )
     return result.scalars().all()
+
+
+async def update_game_analysis_status(
+    db: AsyncSession,
+    game_id: int,
+    status: str,
+    analysis_data: Optional[str] = None
+) -> Optional[Game]:
+    """
+    Update the analysis status and data for a game.
+
+    Args:
+        db: Database session
+        game_id: Database ID of the game
+        status: New analysis status ('queued', 'analyzing', 'completed')
+        analysis_data: Optional analysis data (JSON string)
+
+    Returns:
+        Updated Game object if found, None otherwise
+    """
+    game = await get_game_by_id(db, game_id)
+
+    if not game:
+        return None
+
+    game.analysis_status = status
+    if analysis_data is not None:
+        game.analysis_data = analysis_data
+
+    await db.commit()
+    await db.refresh(game)
+    return game

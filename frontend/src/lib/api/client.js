@@ -147,3 +147,14 @@ export async function uploadDatabase(file) {
     throw error;
   }
 }
+
+// Game Analysis API
+export async function analyzeGame(gameId) {
+  return apiFetch(`/api/games/${gameId}/analyze`, {
+    method: 'POST',
+  });
+}
+
+export async function getGameAnalysis(gameId) {
+  return apiFetch(`/api/games/${gameId}/analysis`);
+}

@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { getGames, startSync, getSyncStatus, getSettings } from '../api/client.js';
+  import { getGames, startSync, getSyncStatus, getSettings, analyzeGame, getGameAnalysis } from '../api/client.js';
 
   // State
   let games = [];
@@ -21,6 +21,10 @@
   let syncError = null;
   let syncSuccess = null;
   let username = ''; // From settings, used as default for playerName
+  let analyzingGames = new Set(); // Track games currently being analyzed
+  let selectedAnalysis = null; // Currently viewed analysis
+  let showAnalysisModal = false; // Show/hide analysis modal
+  let analysisError = null;
 
   // Computed
   $: totalPages = Math.ceil(total / pageSize);
@@ -215,6 +219,49 @@
     }
   }
 
+  async function handleAnalyzeGame(gameId) {
+    analyzingGames.add(gameId);
+    analyzingGames = analyzingGames; // Trigger reactivity
+    analysisError = null;
+
+    try {
+      const result = await analyzeGame(gameId);
+      console.log('[Games] Analysis completed:', result);
+
+      // Reload games to update status
+      await loadGames();
+
+      // Show success message
+      syncSuccess = `Game analyzed successfully! ${result.total_moves} moves analyzed.`;
+      setTimeout(() => syncSuccess = null, 5000);
+    } catch (err) {
+      console.error('[Games] Analysis failed:', err);
+      analysisError = `Failed to analyze game: ${err.message}`;
+      setTimeout(() => analysisError = null, 5000);
+    } finally {
+      analyzingGames.delete(gameId);
+      analyzingGames = analyzingGames; // Trigger reactivity
+    }
+  }
+
+  async function handleViewAnalysis(gameId) {
+    try {
+      const result = await getGameAnalysis(gameId);
+      selectedAnalysis = result.analysis;
+      showAnalysisModal = true;
+      analysisError = null;
+    } catch (err) {
+      console.error('[Games] Failed to load analysis:', err);
+      analysisError = `Failed to load analysis: ${err.message}`;
+      setTimeout(() => analysisError = null, 5000);
+    }
+  }
+
+  function closeAnalysisModal() {
+    showAnalysisModal = false;
+    selectedAnalysis = null;
+  }
+
   onMount(() => {
     loadGames();
   });
@@ -244,6 +291,13 @@
     <div class="alert alert-error">
       Error: {syncError}
       <button class="alert-close" on:click={() => syncError = null}>×</button>
+    </div>
+  {/if}
+
+  {#if analysisError}
+    <div class="alert alert-error">
+      {analysisError}
+      <button class="alert-close" on:click={() => analysisError = null}>×</button>
     </div>
   {/if}
 
@@ -349,6 +403,7 @@
             <th>Black</th>
             <th>Result</th>
             <th>Status</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -362,6 +417,27 @@
                 <span class="status-badge {getStatusBadgeClass(game.analysis_status)}">
                   {game.analysis_status}
                 </span>
+              </td>
+              <td class="actions-cell">
+                {#if game.has_analysis}
+                  <button
+                    class="action-btn view-btn"
+                    on:click={() => handleViewAnalysis(game.id)}
+                  >
+                    View Analysis
+                  </button>
+                {:else if analyzingGames.has(game.id)}
+                  <button class="action-btn analyzing-btn" disabled>
+                    Analyzing...
+                  </button>
+                {:else}
+                  <button
+                    class="action-btn analyze-btn"
+                    on:click={() => handleAnalyzeGame(game.id)}
+                  >
+                    Analyze Game
+                  </button>
+                {/if}
               </td>
             </tr>
           {/each}
@@ -395,6 +471,67 @@
         >
           Next
         </button>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Analysis Modal -->
+  {#if showAnalysisModal && selectedAnalysis}
+    <div class="modal-overlay" on:click={closeAnalysisModal}>
+      <div class="modal-content" on:click|stopPropagation>
+        <div class="modal-header">
+          <h2>Game Analysis</h2>
+          <button class="close-btn" on:click={closeAnalysisModal}>×</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Game Info -->
+          <div class="analysis-section">
+            <h3>Game Information</h3>
+            <div class="game-info">
+              <p><strong>White:</strong> {selectedAnalysis.game_info.white}</p>
+              <p><strong>Black:</strong> {selectedAnalysis.game_info.black}</p>
+              <p><strong>Result:</strong> {selectedAnalysis.game_info.result}</p>
+              <p><strong>Date:</strong> {selectedAnalysis.game_info.date}</p>
+              <p><strong>Total Moves:</strong> {selectedAnalysis.total_moves}</p>
+            </div>
+          </div>
+
+          <!-- Analysis Settings -->
+          <div class="analysis-section">
+            <h3>Analysis Settings</h3>
+            <div class="analysis-settings">
+              <p><strong>Depth:</strong> {selectedAnalysis.analysis_settings.depth}</p>
+              <p><strong>Time per move:</strong> {selectedAnalysis.analysis_settings.time_ms}ms</p>
+              <p><strong>Threads:</strong> {selectedAnalysis.analysis_settings.threads}</p>
+              <p><strong>Hash:</strong> {selectedAnalysis.analysis_settings.hash_mb}MB</p>
+            </div>
+          </div>
+
+          <!-- Moves Analysis -->
+          <div class="analysis-section">
+            <h3>Move-by-Move Analysis</h3>
+            <div class="moves-list">
+              {#each selectedAnalysis.moves as move, index}
+                <div class="move-card">
+                  <div class="move-header">
+                    <strong>Move {move.move_number}:</strong>
+                    <span class="move-notation">{move.move}</span>
+                    <span class="score {move.analysis.score_type === 'mate' ? 'mate-score' : ''}">
+                      {move.analysis.score}
+                    </span>
+                  </div>
+                  <div class="move-details">
+                    <p><strong>Best move:</strong> {move.analysis.best_move || 'N/A'}</p>
+                    {#if move.analysis.pv && move.analysis.pv.length > 0}
+                      <p><strong>Principal variation:</strong> {move.analysis.pv.slice(0, 3).join(' ')}</p>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   {/if}
@@ -746,6 +883,187 @@
   .page-info {
     font-weight: 500;
     color: #2c3e50;
+  }
+
+  /* Actions column */
+  .actions-cell {
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .action-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .analyze-btn {
+    background: #3498db;
+    color: white;
+  }
+
+  .analyze-btn:hover {
+    background: #2980b9;
+  }
+
+  .view-btn {
+    background: #27ae60;
+    color: white;
+  }
+
+  .view-btn:hover {
+    background: #229954;
+  }
+
+  .analyzing-btn {
+    background: #f39c12;
+    color: white;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  /* Analysis Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 2rem;
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: 8px;
+    max-width: 1000px;
+    max-height: 90vh;
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .modal-header h2 {
+    margin: 0;
+    color: #2c3e50;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: #7f8c8d;
+    line-height: 1;
+    padding: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .close-btn:hover {
+    color: #e74c3c;
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+
+  .analysis-section {
+    margin-bottom: 2rem;
+  }
+
+  .analysis-section h3 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+  }
+
+  .game-info,
+  .analysis-settings {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 4px;
+  }
+
+  .game-info p,
+  .analysis-settings p {
+    margin: 0.5rem 0;
+    color: #34495e;
+  }
+
+  .moves-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 0.5rem;
+  }
+
+  .move-card {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 4px;
+    border-left: 4px solid #3498db;
+  }
+
+  .move-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .move-notation {
+    font-family: monospace;
+    background: #ecf0f1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .score {
+    margin-left: auto;
+    font-weight: 600;
+    padding: 0.25rem 0.75rem;
+    border-radius: 3px;
+    background: #3498db;
+    color: white;
+  }
+
+  .mate-score {
+    background: #e74c3c;
+  }
+
+  .move-details {
+    font-size: 0.875rem;
+    color: #7f8c8d;
+  }
+
+  .move-details p {
+    margin: 0.25rem 0;
   }
 
   /* Responsive design */

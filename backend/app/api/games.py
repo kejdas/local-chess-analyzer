@@ -7,6 +7,11 @@ from datetime import datetime
 from ..db.database import get_db_session
 from ..crud import games as crud_games
 from ..db.models import Game
+from ..services.stockfish_service import (
+    analyze_game_async,
+    get_game_analysis,
+    has_game_analysis
+)
 
 
 router = APIRouter()
@@ -21,6 +26,7 @@ class GameResponse(BaseModel):
     game_date: Optional[str] = None
     import_date: datetime
     analysis_status: str
+    has_analysis: bool = False  # Whether analysis file exists
 
     @field_serializer('import_date')
     def serialize_import_date(self, import_date: datetime, _info):
@@ -50,6 +56,7 @@ async def get_games(
 ):
     """
     Get paginated list of games with optional filters and sorting.
+    Automatically detects if analysis files exist for each game.
 
     Args:
         skip: Number of games to skip (for pagination)
@@ -87,8 +94,31 @@ async def get_games(
         status=status
     )
 
+    # Convert to response models and check for analysis files
+    game_responses = []
+    for game in games:
+        game_dict = {
+            "id": game.id,
+            "chess_com_id": game.chess_com_id,
+            "white_player": game.white_player,
+            "black_player": game.black_player,
+            "result": game.result,
+            "game_date": game.game_date,
+            "import_date": game.import_date,
+            "analysis_status": game.analysis_status,
+            "has_analysis": has_game_analysis(game.id)
+        }
+
+        # Auto-detect: if analysis file exists, status should be "completed"
+        if game_dict["has_analysis"] and game_dict["analysis_status"] != "completed":
+            game_dict["analysis_status"] = "completed"
+            # Update database status if it's different
+            await crud_games.update_game_analysis_status(db, game.id, "completed")
+
+        game_responses.append(GameResponse(**game_dict))
+
     return GamesListResponse(
-        games=games,
+        games=game_responses,
         total=total,
         skip=skip,
         limit=limit
@@ -113,4 +143,102 @@ async def get_games_stats(db: AsyncSession = Depends(get_db_session)):
         'queued': len(queued),
         'analyzing': len(analyzing),
         'completed': len(completed)
+    }
+
+
+@router.post("/api/games/{game_id}/analyze")
+async def analyze_game(
+    game_id: int,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Analyze a game using Stockfish and save results to JSON file.
+
+    Args:
+        game_id: Database ID of the game to analyze
+
+    Returns:
+        Dictionary with analysis status and results
+    """
+    # Get the game from database
+    game = await crud_games.get_game_by_id(db, game_id)
+
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # Check if already analyzed
+    if has_game_analysis(game_id):
+        return {
+            "success": True,
+            "message": "Game already analyzed",
+            "game_id": game_id,
+            "status": "already_completed"
+        }
+
+    try:
+        # Update status to analyzing
+        await crud_games.update_game_analysis_status(db, game_id, "analyzing")
+
+        # Run analysis
+        result = await analyze_game_async(
+            game_id=game_id,
+            pgn_text=game.pgn,
+            db=db
+        )
+
+        # Update status to completed
+        await crud_games.update_game_analysis_status(db, game_id, "completed")
+
+        return {
+            "success": True,
+            "message": "Game analyzed successfully",
+            "game_id": game_id,
+            "total_moves": result["total_moves"],
+            "analysis_file": result["analysis_file"],
+            "status": "completed"
+        }
+
+    except Exception as e:
+        # Reset status to queued on error
+        await crud_games.update_game_analysis_status(db, game_id, "queued")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis failed: {str(e)}"
+        )
+
+
+@router.get("/api/games/{game_id}/analysis")
+async def get_analysis(
+    game_id: int,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Get analysis results for a game.
+
+    Args:
+        game_id: Database ID of the game
+
+    Returns:
+        Analysis data if available, 404 if not found
+    """
+    # Check if game exists
+    game = await crud_games.get_game_by_id(db, game_id)
+
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # Get analysis from JSON file
+    analysis = get_game_analysis(game_id)
+
+    if not analysis:
+        raise HTTPException(
+            status_code=404,
+            detail="Analysis not found. Please analyze this game first."
+        )
+
+    return {
+        "success": True,
+        "game_id": game_id,
+        "analysis": analysis
     }

@@ -9,8 +9,8 @@
 ### Project Identity
 - **Name:** Local Chess Analyzer
 - **Purpose:** Self-hosted Chess.com game analysis using Stockfish
-- **Current Phase:** Steps 1-7 Complete → **Next: Step 8 (Stockfish Analysis Integration)**
-- **Last Updated:** November 4, 2025
+- **Current Phase:** Steps 1-8 Complete ✅ **Core Features Complete!**
+- **Last Updated:** November 6, 2025
 - **Project Root:** `/root/docker/local-chess-analyzer/`
 
 ### Critical "Don't Break This" Rules 🚨
@@ -36,9 +36,10 @@
 ### Critical Files You'll Modify Often
 ```
 Backend:
-  /root/docker/local-chess-analyzer/backend/app/api/games.py          # Game endpoints
-  /root/docker/local-chess-analyzer/backend/app/crud/games.py         # DB queries
-  /root/docker/local-chess-analyzer/backend/app/models.py             # Schema
+  /root/docker/local-chess-analyzer/backend/app/api/games.py                  # Game endpoints
+  /root/docker/local-chess-analyzer/backend/app/crud/games.py                 # DB queries
+  /root/docker/local-chess-analyzer/backend/app/models.py                     # Schema
+  /root/docker/local-chess-analyzer/backend/app/services/stockfish_service.py # Stockfish analysis
 
 Frontend:
   /root/docker/local-chess-analyzer/frontend/src/lib/components/Games.svelte    # Games UI
@@ -47,9 +48,13 @@ Frontend:
 
 Database:
   /root/docker/local-chess-analyzer/data/games.db                     # SQLite DB
+  /root/docker/local-chess-analyzer/data/analysis/                    # Analysis results (JSON)
 
 Docker:
   /root/docker/local-chess-analyzer/docker-compose.yml                # Services config
+
+Stockfish:
+  /root/docker/local-chess-analyzer/stockfish/stockfish_binary        # Stockfish 17.1 engine
 ```
 
 ### When to Edit Each File
@@ -266,6 +271,59 @@ GET /api/system-resources
   }
 ```
 
+### Stockfish Analysis Endpoints
+```http
+POST /api/games/{game_id}/analyze
+  Description: Analyze a game with Stockfish engine
+  Process:
+    1. Loads game PGN from database
+    2. Loads analysis settings (depth, time, threads, hash)
+    3. Analyzes each move with Stockfish UCI protocol
+    4. Saves results to /app/data/analysis/{game_id}.json
+    5. Updates game analysis_status to "completed"
+  Response: {
+    "success": true,
+    "message": "Game analyzed successfully",
+    "game_id": 1,
+    "total_moves": 16,
+    "analysis_file": "/app/data/analysis/1.json",
+    "status": "completed"
+  }
+
+GET /api/games/{game_id}/analysis
+  Description: Retrieve analysis results for a game
+  Response: {
+    "success": true,
+    "game_id": 1,
+    "has_analysis": true,
+    "analysis": {
+      "game_info": { "white": "...", "black": "...", "result": "...", "date": "..." },
+      "analysis_settings": { "depth": 15, "time_ms": 1000, "threads": 2, "hash_mb": 512 },
+      "moves": [
+        {
+          "move_number": 1,
+          "move": "e4",
+          "uci": "e2e4",
+          "fen_before": "...",
+          "fen_after": "...",
+          "analysis": {
+            "best_move": "e2e4",
+            "pv": ["e2e4", "e7e5", "g1f3"],
+            "score": "0.36",
+            "score_type": "cp",
+            "score_value": 36
+          }
+        },
+        ...
+      ]
+    }
+  }
+
+GET /api/games (Updated)
+  Note: Now auto-detects existing analysis files
+  Response includes "has_analysis": true/false for each game
+```
+
 ---
 
 ## 🚨 Critical Implementation Details (Must Know!)
@@ -411,6 +469,37 @@ const API_BASE_URL = window.location.hostname === 'localhost'
 const API_BASE_URL = 'http://localhost:42069';
 ```
 
+### 8. Stockfish Analysis Architecture
+```python
+# ✅ CORRECT Implementation (current):
+# Location: backend/app/services/stockfish_service.py
+
+Key Features:
+  - UCI protocol communication via subprocess
+  - Settings loaded from database (threads, hash, depth, time_ms)
+  - Move-by-move analysis with best moves and evaluations
+  - Results saved to data/analysis/{game_id}.json
+  - Auto-detection of analyzed games on GET /api/games
+
+Analysis Process:
+  1. Load game PGN and parse moves
+  2. Initialize Stockfish with settings
+  3. For each move:
+     - Set position using FEN
+     - Send "go depth X" or "go movetime Y" command
+     - Parse evaluation (centipawns or mate score)
+     - Extract best move and principal variation (PV)
+  4. Save JSON with game_info, settings, and moves array
+  5. Update game.analysis_status = "completed"
+
+Critical Notes:
+  - Stockfish binary must be x86-64 compatible with host CPU
+  - Binary location: /app/stockfish/stockfish_binary (Stockfish 17.1)
+  - Analysis time scales with: game length × (depth + time_ms)
+  - Thread count must not exceed available CPU cores
+  - Hash size must not exceed available RAM
+```
+
 ---
 
 ## 🎨 UI/UX Patterns (User Expectations)
@@ -517,6 +606,15 @@ Problem: Navigation worked but pages empty
 Root Cause: svelte-routing compatibility issues
 Solution: Switched to svelte-spa-router with hash routing
 When: October 30, 2025
+```
+
+#### 6. Stockfish CPU Compatibility ✅ FIXED
+```
+Problem: Stockfish crashed with SIGILL (Illegal Instruction) exit code 132
+Root Cause: Binary compiled with AVX2/BMI2 instructions incompatible with QEMU Virtual CPU 2.5+
+Solution: User upgraded CPU to support required instruction sets
+Test: Stockfish 17.1 UCI protocol verified working
+When: November 6, 2025
 ```
 
 ---
@@ -686,7 +784,7 @@ docker compose logs frontend --tail=50
 
 ## 📊 Current Project State
 
-### Completed Features (Steps 1-7) ✅
+### Completed Features (Steps 1-8) ✅
 - ✅ Backend API with FastAPI
 - ✅ Chess.com game import
 - ✅ SQLite database with async
@@ -697,26 +795,40 @@ docker compose logs frontend --tail=50
 - ✅ System resource detection
 - ✅ Setup wizard
 - ✅ Database backup/restore/clear
+- ✅ **Stockfish game analysis engine** (Step 8 - NEW!)
+  - Move-by-move analysis with UCI protocol
+  - Best move suggestions and evaluations
+  - Principal variation (PV) lines
+  - Configurable depth and time limits
+  - JSON storage with auto-detection
+  - UI with "Analyze Game" and "View Analysis" buttons
 
-### Statistics (As of Nov 4, 2025)
+### Statistics (As of Nov 6, 2025)
 ```
 Database:
   - Total games: 873
   - Players: Hikaru (308), orzelmocnygaz (551), others (14)
   - Date range: 2025.10.01 to 2025.11.02
-  - Status: All "completed"
+  - Analyzed games: 1+ (analysis capability now available)
 
 Code:
-  - Backend: ~1,500 lines Python
-  - Frontend: ~1,200 lines Svelte
+  - Backend: ~2,000 lines Python (+500 for Stockfish service)
+  - Frontend: ~1,400 lines Svelte (+200 for analysis UI)
   - CSS: ~800 lines
-  - Total: ~3,500 lines
+  - Total: ~4,200 lines (+700 lines for Step 8)
 
 Performance:
   - API response: <50ms
   - Database query: <20ms
   - Frontend render: instant
   - Sync: ~3s for 300 games
+  - Analysis: ~1-3s per move (depends on depth/time settings)
+
+Stockfish:
+  - Engine: Stockfish 17.1
+  - Binary: /app/stockfish/stockfish_binary
+  - Status: Working with UCI protocol
+  - Default settings: depth=15, time=1000ms, threads=2, hash=512MB
 ```
 
 ### Technical Debt (Known Issues) ⚠️
@@ -730,64 +842,125 @@ Performance:
 8. **No Error Tracking** - Exceptions not captured
 
 ### What's NOT Implemented Yet 🔴
-- Stockfish analysis engine integration (Step 8 - NEXT!)
-- Game replay with chess board
-- Analysis visualization
-- Performance statistics
-- Opening repertoire
-- Mistake pattern detection
-- Export to PGN
-- Position search
+- Interactive chess board for game replay
+- Visual analysis charts and graphs
+- Blunder/mistake/inaccuracy detection and highlighting
+- Performance statistics and trends over time
+- Opening repertoire builder
+- Mistake pattern detection and recommendations
+- Export analyzed games to PGN
+- Position search across all games
+- Batch analysis (analyze multiple games at once)
+- Analysis queue management for concurrent requests
 
 ---
 
-## 🎯 Step 8 Preview: Stockfish Analysis (Next Task)
+## 🎯 Step 8 Complete: Stockfish Analysis ✅
 
-### What Needs to Be Built
+### What Was Built (November 6, 2025)
 ```
-1. Background Worker
-   - Async task queue for game analysis
-   - Progress tracking
-   - Error handling
+✅ Stockfish Service (backend/app/services/stockfish_service.py)
+   - UCI protocol subprocess communication
+   - Move-by-move game analysis
+   - Settings loaded from database (threads, hash, depth, time)
+   - Results saved to data/analysis/{game_id}.json
+   - Error handling and validation
 
-2. Stockfish Integration
-   - Subprocess management
-   - UCI protocol communication
-   - Position evaluation
+✅ API Endpoints
+   - POST /api/games/{game_id}/analyze - Start analysis
+   - GET /api/games/{game_id}/analysis - Get results
+   - GET /api/games - Auto-detects existing analysis files (adds has_analysis field)
 
-3. Analysis Storage
-   - Store results in analysis_data (JSON)
-   - Update analysis_status
-   - Track progress
+✅ CRUD Functions
+   - get_game_by_id() - Fetch game by database ID
+   - update_game_analysis_status() - Update analysis status
 
-4. UI Updates
-   - Show analysis progress
-   - Display results
-   - Visualization of evaluations
+✅ Frontend UI (frontend/src/lib/components/Games.svelte)
+   - "Analyze Game" button (blue) for unanalyzed games
+   - "View Analysis" button (green) for analyzed games
+   - Loading state while analyzing
+   - Analysis modal with:
+     - Game info (players, result, date)
+     - Analysis settings used
+     - Move-by-move evaluations
+     - Best moves and principal variations
 
-5. API Endpoints
-   - POST /api/analysis/start (single game)
-   - POST /api/analysis/batch (multiple games)
-   - GET /api/analysis/status/{game_id}
-   - DELETE /api/analysis/stop
+✅ API Client (frontend/src/lib/api/client.js)
+   - analyzeGame(gameId) - Trigger analysis
+   - getGameAnalysis(gameId) - Fetch results
 ```
 
-### Key Considerations for Step 8
+### How It Works
 ```
-⚠️ Challenges:
-- Stockfish is CPU-intensive (respect thread limits)
-- Long-running tasks (need progress updates)
-- Error handling (Stockfish crashes?)
-- Concurrent analysis (queue management)
-- Results serialization (JSON format)
+User Flow:
+  1. User clicks "Analyze Game" on any game in the games list
+  2. Backend loads game PGN and settings from database
+  3. Stockfish analyzes each move (depth/time configurable in Settings)
+  4. Results saved to JSON file in data/analysis/
+  5. Game status updated to "completed"
+  6. User clicks "View Analysis" to see detailed results
 
-✅ Best Practices:
-- Use background tasks (don't block API)
-- Implement task queue (Celery? or simple queue?)
-- Add cancellation support
-- Store intermediate results
-- Log everything
-- Test with real games
+Technical Flow:
+  1. POST /api/games/{game_id}/analyze
+  2. Load game.pgn from database
+  3. Parse PGN into chess.Board
+  4. Initialize Stockfish subprocess
+  5. For each move:
+     - Set position with FEN
+     - Send "go depth X" or "go movetime Y"
+     - Parse "info score cp X" and "bestmove"
+     - Store evaluation, best move, PV
+  6. Save JSON and update database
+  7. Return success response
+```
+
+### Analysis JSON Format
+```json
+{
+  "game_info": {
+    "white": "PlayerName",
+    "black": "OpponentName",
+    "result": "1-0",
+    "date": "2025.11.06"
+  },
+  "analysis_settings": {
+    "depth": 15,
+    "time_ms": 1000,
+    "threads": 2,
+    "hash_mb": 512
+  },
+  "moves": [
+    {
+      "move_number": 1,
+      "move": "e4",
+      "uci": "e2e4",
+      "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "analysis": {
+        "fen": "...",
+        "best_move": "e2e4",
+        "pv": ["e2e4", "e7e5", "g1f3"],
+        "score": "0.36",
+        "score_type": "cp",
+        "score_value": 36
+      }
+    }
+  ]
+}
+```
+
+### Testing Results (November 6, 2025)
+```
+✅ Stockfish 17.1 binary accessible and working
+✅ UCI protocol communication verified
+✅ Full game analysis tested (game ID 1, 16 moves)
+✅ Analysis file created successfully
+✅ API endpoints functioning correctly
+✅ Frontend UI displaying results properly
+
+Test Game: keeejdi vs wesolykrasnal (2021.02.23)
+Analysis Time: ~1-3 seconds per move
+Settings: depth=15, time=1000ms, threads=2, hash=512MB
 ```
 
 ---
@@ -842,15 +1015,17 @@ After every change, test:
 
 ### Documentation Files
 ```
-/root/docker/local-chess-analyzer/notes/
-├── README.md                    # Project overview
-├── Summary 30.10.2025.md        # Steps 4-6 session log
-├── Summary 03.11.2025.md        # Step 7 session log (games list)
-├── Summary 04.11.2025.md        # Database management session
-├── Step 4 - completed.md        # Frontend implementation
-├── Step 5 - completed.md        # Resource detection
-├── Step 6 - completed.md        # Setup wizard
-└── PROJECT_CONTEXT.md           # This file is in /root/docker/local-chess-analyzer/
+/root/docker/local-chess-analyzer/
+├── PROJECT_CONTEXT.md                  # This file - Main AI agent guide
+├── STOCKFISH_INTEGRATION_SUMMARY.md    # Step 8 implementation details (Nov 6, 2025)
+└── notes/
+    ├── README.md                       # Project overview
+    ├── Summary 30.10.2025.md           # Steps 4-6 session log
+    ├── Summary 03.11.2025.md           # Step 7 session log (games list)
+    ├── Summary 04.11.2025.md           # Database management session
+    ├── Step 4 - completed.md           # Frontend implementation
+    ├── Step 5 - completed.md           # Resource detection
+    └── Step 6 - completed.md           # Setup wizard
 ```
 
 ### External Docs
@@ -922,10 +1097,18 @@ docker compose restart frontend
 
 ---
 
-**Last Updated:** November 4, 2025  
-**Version:** 2.0 (AI Agent Optimized)  
-**Next Review:** After Step 8 completion  
+**Last Updated:** November 6, 2025
+**Version:** 3.0 (Step 8 Complete - Stockfish Integration)
+**Next Review:** After Step 9 planning or major feature additions
 **Maintained By:** Development team + AI assistants
+
+**Recent Changes:**
+- Step 8 (Stockfish Analysis) completed and tested
+- Added Stockfish service architecture documentation
+- Added analysis API endpoints documentation
+- Updated statistics to reflect +700 lines of code
+- Added CPU compatibility issue to known issues history
+- Updated file locations to include stockfish_service.py and analysis directory
 
 ---
 
@@ -962,6 +1145,22 @@ docker compose restart frontend
 - Frontend: Native date inputs use ISO format
 - Decision: Convert at boundaries vs changing schema
 - Future: Normalize to ISO 8601 everywhere
+
+**Why Stockfish via subprocess instead of library?**
+- Stockfish is a standalone binary, not a Python library
+- UCI protocol is industry standard for chess engines
+- Subprocess allows async communication without blocking
+- Easy to replace/upgrade Stockfish binary independently
+- No need for C++ bindings or wrappers
+- Future: Can add queue for batch analysis
+
+**Why JSON files instead of database storage for analysis?**
+- Large analysis data (can be 100+ KB per game)
+- Reduces database size and query overhead
+- Easy to backup/restore individually
+- Can be cached/served directly by web server
+- Auto-detection via filesystem is fast
+- Future: Can move to database if needed
 
 ### User Feedback Integration
 
