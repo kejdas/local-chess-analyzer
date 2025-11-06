@@ -215,6 +215,15 @@
     }
   }
 
+  // Resolve potential rating fields from backend (support multiple common keys)
+  function getWhiteRating(game) {
+    return game.white_rating ?? game.white_elo ?? game.white_rating_after ?? game.white_elo_after ?? null;
+  }
+
+  function getBlackRating(game) {
+    return game.black_rating ?? game.black_elo ?? game.black_rating_after ?? game.black_elo_after ?? null;
+  }
+
   onMount(() => {
     loadGames();
   });
@@ -348,15 +357,37 @@
             <th>White</th>
             <th>Black</th>
             <th>Result</th>
-            <th>Status</th>
+            <th class="status-header">Status</th>
           </tr>
         </thead>
         <tbody>
           {#each displayedGames as game (game.id)}
             <tr>
               <td class="date-cell">{formatDate(game.game_date)}</td>
-              <td class="player-cell">{game.white_player || 'Unknown'}</td>
-              <td class="player-cell">{game.black_player || 'Unknown'}</td>
+              <td class="player-cell">
+                {#if game.white_player}
+                  <span class:selected-player={playerName && game.white_player.toLowerCase() === playerName.toLowerCase().trim()}>
+                    {game.white_player}
+                  </span>
+                  {#if getWhiteRating(game) !== null}
+                    <span class="player-rating"> ({getWhiteRating(game)})</span>
+                  {/if}
+                {:else}
+                  Unknown
+                {/if}
+              </td>
+              <td class="player-cell">
+                {#if game.black_player}
+                  <span class:selected-player={playerName && game.black_player.toLowerCase() === playerName.toLowerCase().trim()}>
+                    {game.black_player}
+                  </span>
+                  {#if getBlackRating(game) !== null}
+                    <span class="player-rating"> ({getBlackRating(game)})</span>
+                  {/if}
+                {:else}
+                  Unknown
+                {/if}
+              </td>
               <td class="result-cell">{game.result || 'N/A'}</td>
               <td class="status-cell">
                 <span class="status-badge {getStatusBadgeClass(game.analysis_status)}">
@@ -626,6 +657,10 @@
     letter-spacing: 0.5px;
   }
 
+  .status-header {
+    text-align: center;
+  }
+
   th.sortable {
     cursor: pointer;
     user-select: none;
@@ -662,6 +697,15 @@
   .player-cell {
     font-weight: 500;
     color: #2c3e50;
+  }
+
+  .selected-player {
+    font-weight: 800;
+  }
+
+  .player-rating {
+    color: #7f8c8d;
+    font-weight: 400;
   }
 
   .result-cell {

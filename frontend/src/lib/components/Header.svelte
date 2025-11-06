@@ -1,7 +1,7 @@
 <script>
   import { location } from 'svelte-spa-router';
   import active from 'svelte-spa-router/active';
-  import logo from '../../assets/logo.png';
+  import logo from '../../assets/logo.svg';
 </script>
 
 <header>
