@@ -89,6 +89,10 @@ export async function getGames(skip = 0, limit = 100, filters = {}, sort = {}) {
   return apiFetch(`/api/games?${params.toString()}`);
 }
 
+export async function getGame(gameId) {
+  return apiFetch(`/api/games/${gameId}`);
+}
+
 export async function getGamesStats() {
   return apiFetch('/api/games/stats');
 }

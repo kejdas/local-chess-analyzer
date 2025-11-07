@@ -6,6 +6,7 @@
   import Settings from './lib/components/Settings.svelte';
   import Sync from './lib/components/Sync.svelte';
   import Games from './lib/components/Games.svelte';
+  import GameView from './lib/components/GameView.svelte';
   import SetupWizard from './lib/components/SetupWizard.svelte';
   import { getSettings } from './lib/api/client.js';
 
@@ -14,6 +15,7 @@
     '/settings': Settings,
     '/sync': Sync,
     '/games': Games,
+    '/games/:id': GameView,
   };
 
   let showWizard = false;

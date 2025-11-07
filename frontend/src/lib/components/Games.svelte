@@ -419,6 +419,9 @@
                 </span>
               </td>
               <td class="actions-cell">
+                <a href="#/games/{game.id}" class="action-btn view-game-btn">
+                  View Game
+                </a>
                 {#if game.has_analysis}
                   <button
                     class="action-btn view-btn"
@@ -887,18 +890,23 @@
 
   /* Actions column */
   .actions-cell {
-    text-align: center;
-    white-space: nowrap;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 0.5rem;
   }
 
   .action-btn {
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 0.75rem;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     font-weight: 500;
     transition: all 0.2s;
+    white-space: nowrap;
   }
 
   .analyze-btn {
@@ -924,6 +932,20 @@
     color: white;
     cursor: not-allowed;
     opacity: 0.7;
+  }
+
+  .view-game-btn {
+    background: #9b59b6;
+    color: white;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .view-game-btn:hover {
+    background: #8e44ad;
+    text-decoration: none;
   }
 
   /* Analysis Modal */

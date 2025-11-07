@@ -20,6 +20,7 @@ router = APIRouter()
 class GameResponse(BaseModel):
     id: int
     chess_com_id: str
+    pgn: Optional[str] = None
     white_player: Optional[str] = None
     black_player: Optional[str] = None
     result: Optional[str] = None
@@ -144,6 +145,47 @@ async def get_games_stats(db: AsyncSession = Depends(get_db_session)):
         'analyzing': len(analyzing),
         'completed': len(completed)
     }
+
+
+@router.get("/api/games/{game_id}", response_model=GameResponse)
+async def get_game(
+    game_id: int,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Get a single game by ID.
+
+    Args:
+        game_id: Database ID of the game
+
+    Returns:
+        Game data with metadata
+    """
+    game = await crud_games.get_game_by_id(db, game_id)
+
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # Create response with analysis detection
+    game_dict = {
+        "id": game.id,
+        "chess_com_id": game.chess_com_id,
+        "pgn": game.pgn,
+        "white_player": game.white_player,
+        "black_player": game.black_player,
+        "result": game.result,
+        "game_date": game.game_date,
+        "import_date": game.import_date,
+        "analysis_status": game.analysis_status,
+        "has_analysis": has_game_analysis(game.id)
+    }
+
+    # Auto-detect: if analysis file exists, status should be "completed"
+    if game_dict["has_analysis"] and game_dict["analysis_status"] != "completed":
+        game_dict["analysis_status"] = "completed"
+        await crud_games.update_game_analysis_status(db, game.id, "completed")
+
+    return GameResponse(**game_dict)
 
 
 @router.post("/api/games/{game_id}/analyze")

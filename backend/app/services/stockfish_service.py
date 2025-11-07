@@ -211,15 +211,28 @@ class StockfishAnalyzer:
                 "pv": pv[:5] if pv else []  # First 5 moves of principal variation
             }
 
+            # Determine whose turn it is from FEN (to normalize score to White's perspective)
+            # FEN format: "position w/b ..." where w=white to move, b=black to move
+            fen_parts = fen.split()
+            is_black_to_move = len(fen_parts) > 1 and fen_parts[1] == 'b'
+
+            # Stockfish returns scores from side-to-move perspective
+            # Normalize to always be from White's perspective:
+            # - If White to move: keep score as-is
+            # - If Black to move: negate score (so positive = white advantage, negative = black advantage)
+            score_multiplier = -1 if is_black_to_move else 1
+
             # Add score
             if score_mate is not None:
-                result["score"] = f"M{score_mate}"
+                normalized_mate = score_mate * score_multiplier
+                result["score"] = f"M{normalized_mate}"
                 result["score_type"] = "mate"
-                result["score_value"] = score_mate
+                result["score_value"] = normalized_mate
             elif score_cp is not None:
-                result["score"] = f"{score_cp / 100:.2f}"
+                normalized_cp = score_cp * score_multiplier
+                result["score"] = f"{normalized_cp / 100:.2f}"
                 result["score_type"] = "cp"
-                result["score_value"] = score_cp
+                result["score_value"] = normalized_cp
             else:
                 result["score"] = "0.00"
                 result["score_type"] = "cp"
