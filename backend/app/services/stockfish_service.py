@@ -10,6 +10,7 @@ import io
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from ..db.models import Setting
+from math import exp
 
 
 async def get_stockfish_settings(db: AsyncSession) -> Dict[str, Any]:
@@ -82,6 +83,65 @@ class StockfishAnalyzer:
         self.depth = depth
         self.time_ms = time_ms
         self.process: Optional[subprocess.Popen] = None
+
+    @staticmethod
+    def _expected_points_from_white_eval(score_type: str, score_value: int) -> float:
+        """
+        Convert engine evaluation (normalized to White perspective) into Expected Points for White.
+        Mate scores saturate to 0 or 1. Centipawn scores use a logistic mapping.
+        """
+        # Handle mate: positive for White, negative for Black
+        if score_type == "mate":
+            return 1.0 if score_value > 0 else 0.0
+
+        # Centipawns normalized for White: positive = White advantage
+        # Convert to pawns
+        pawns = score_value / 100.0
+        # Logistic mapping: tweak k for sensible curve (about 0.55 per pawn)
+        k = 0.55
+        ep = 1.0 / (1.0 + exp(-k * pawns))
+        # Clamp for safety
+        if ep < 0.0:
+            ep = 0.0
+        if ep > 1.0:
+            ep = 1.0
+        return ep
+
+    @staticmethod
+    def _material_score_from_fen(fen: str, side: str) -> int:
+        """
+        Compute a simple material score for the given side ('w' or 'b') from a FEN.
+        Piece values: P=1, N=3, B=3, R=5, Q=9, K=0
+        """
+        values = {'p': 1, 'n': 3, 'b': 3, 'r': 5, 'q': 9, 'k': 0}
+        board_part = fen.split()[0]
+        score = 0
+        for ch in board_part:
+            if ch == '/' or ch.isdigit():
+                continue
+            if side == 'w' and ch.isupper():
+                score += values.get(ch.lower(), 0)
+            if side == 'b' and ch.islower():
+                score += values.get(ch, 0)
+        return score
+
+    @staticmethod
+    def _classify_move_from_ep_loss(ep_loss: float) -> str:
+        """
+        Classify move according to Expected Points loss thresholds.
+        """
+        # Best: exactly 0; allow tiny epsilon
+        if ep_loss <= 0.005:
+            return "Best"
+        if ep_loss <= 0.02:
+            return "Excellent"
+        if ep_loss <= 0.05:
+            return "Good"
+        if ep_loss <= 0.10:
+            return "Inaccuracy"
+        if ep_loss <= 0.20:
+            return "Mistake"
+        return "Blunder"
 
     def start_engine(self):
         """Start the Stockfish engine process."""
@@ -321,6 +381,88 @@ class StockfishAnalyzer:
                 "total_moves": len(move_analysis),
                 "final_fen": board.fen()
             }
+
+            # Second pass: compute Expected Points and classifications per move
+            total_moves = len(move_analysis)
+            for i, md in enumerate(move_analysis):
+                fen_before = md.get("fen_before")
+                fen_after = md.get("fen_after")
+                analysis_before = md.get("analysis", {})
+                score_type_before = analysis_before.get("score_type", "cp")
+                score_value_before = analysis_before.get("score_value", 0)
+
+                # EP for White before this move
+                ep_white_before = self._expected_points_from_white_eval(score_type_before, score_value_before)
+
+                # EP for White after this move: use next move's analysis (which analyzes fen_after)
+                if i + 1 < total_moves:
+                    next_analysis = move_analysis[i + 1].get("analysis", {})
+                    ep_white_after = self._expected_points_from_white_eval(
+                        next_analysis.get("score_type", "cp"),
+                        next_analysis.get("score_value", 0)
+                    )
+                else:
+                    # Last move: derive from game result
+                    if result == "1-0":
+                        ep_white_after = 1.0
+                    elif result == "0-1":
+                        ep_white_after = 0.0
+                    elif result == "1/2-1/2":
+                        ep_white_after = 0.5
+                    else:
+                        # Unknown; assume unchanged
+                        ep_white_after = ep_white_before
+
+                # Determine who moved from FEN before
+                side_to_move = fen_before.split()[1] if fen_before else ('w' if i % 2 == 0 else 'w')
+                mover = side_to_move  # mover is side to move at fen_before
+
+                # EP from mover perspective
+                if mover == 'w':
+                    ep_before = ep_white_before
+                    ep_after = ep_white_after
+                else:
+                    ep_before = 1.0 - ep_white_before
+                    ep_after = 1.0 - ep_white_after
+
+                ep_loss = max(0.0, ep_before - ep_after)
+                ep_gain = max(0.0, ep_after - ep_before)
+
+                # Base classification
+                classification = self._classify_move_from_ep_loss(ep_loss)
+
+                # Special classifications
+                special = None
+                # Great Move: significantly improves outcome or flips evaluation to winning
+                if ep_before <= 0.35 and ep_after >= 0.65 and ep_gain >= 0.20:
+                    special = "Great Move"
+
+                # Brilliant: a (material) sacrifice that yields/keeps a good outcome
+                try:
+                    mat_before = self._material_score_from_fen(fen_before, mover)
+                    mat_after = self._material_score_from_fen(fen_after, mover)
+                    mat_delta = mat_after - mat_before  # negative means sacrifice
+                except Exception:
+                    mat_delta = 0
+                # Sacrifice at least a minor piece and position is not losing after
+                if special is None and mat_delta <= -3 and ep_after >= 0.55 and ep_before <= 0.70:
+                    special = "Brilliant"
+
+                # Miss: failed to capitalize on strong position (beyond EP thresholds)
+                if special is None and ep_before >= 0.65 and ep_after <= (ep_before - 0.10):
+                    special = "Miss"
+
+                md["expected_points"] = {
+                    "mover_before": round(ep_before, 3),
+                    "mover_after": round(ep_after, 3),
+                    "white_before": round(ep_white_before, 3),
+                    "white_after": round(ep_white_after, 3),
+                    "loss": round(ep_loss, 3),
+                    "gain": round(ep_gain, 3)
+                }
+                md["classification"] = classification
+                if special:
+                    md["special_classification"] = special
 
             return analysis_result
 

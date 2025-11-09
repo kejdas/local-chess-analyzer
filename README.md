@@ -97,7 +97,7 @@ cd /root/docker/local-chess-analyzer
 
 2. Build and start the containers:
 ```bash
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml up --build
+docker compose -f docker-compose.yml up --build
 ```
 
 3. Access the application:

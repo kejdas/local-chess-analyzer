@@ -12,6 +12,7 @@
   let searchTerm = '';
   let statusFilter = 'all';
   let resultFilter = 'all'; // all, win, loss, draw
+  let timeClassFilter = 'all'; // all, bullet, blitz, rapid, daily, other
   let playerName = ''; // For result filtering - which player to check results for
   let dateFrom = '';
   let dateTo = '';
@@ -72,13 +73,13 @@
   let hasInitialLoad = false;
 
   // Reload games when filters change (but not on initial mount)
-  $: if (hasInitialLoad && (dateFrom || dateTo || statusFilter !== 'all')) {
+  $: if (hasInitialLoad && (dateFrom || dateTo || statusFilter !== 'all' || timeClassFilter !== 'all')) {
     currentPage = 0;
     loadGames();
   }
 
   // Also reload when clearing filters back to defaults
-  $: if (hasInitialLoad && !dateFrom && !dateTo && statusFilter === 'all') {
+  $: if (hasInitialLoad && !dateFrom && !dateTo && statusFilter === 'all' && timeClassFilter === 'all') {
     loadGames();
   }
 
@@ -91,6 +92,7 @@
       if (dateFrom) filters.date_from = dateFrom;
       if (dateTo) filters.date_to = dateTo;
       if (statusFilter && statusFilter !== 'all') filters.status = statusFilter;
+      if (timeClassFilter && timeClassFilter !== 'all') filters.time_class = timeClassFilter;
 
       // Build sort object for API
       const sort = {
@@ -146,6 +148,7 @@
     playerName = username; // Reset to default username from settings
     dateFrom = '';
     dateTo = '';
+    timeClassFilter = 'all';
   }
 
   async function handleSync() {
@@ -208,6 +211,11 @@
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString();
+  }
+
+  function formatType(type) {
+    if (!type) return 'Other';
+    return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
   function getStatusBadgeClass(status) {
@@ -333,6 +341,18 @@
       </div>
 
       <div class="filter-box">
+        <label for="time-class-filter">Type:</label>
+        <select id="time-class-filter" bind:value={timeClassFilter}>
+          <option value="all">All</option>
+          <option value="bullet">Bullet</option>
+          <option value="blitz">Blitz</option>
+          <option value="rapid">Rapid</option>
+          <option value="daily">Daily</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div class="filter-box">
         <label for="player-name">Player:</label>
         <input
           type="text"
@@ -399,10 +419,36 @@
                 <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
               {/if}
             </th>
-            <th>White</th>
-            <th>Black</th>
-            <th>Result</th>
-            <th>Status</th>
+            <th class="sortable" on:click={() => handleColumnSort('white')}>
+              White
+              {#if sortBy === 'white'}
+                <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+              {/if}
+            </th>
+            <th class="sortable" on:click={() => handleColumnSort('black')}>
+              Black
+              {#if sortBy === 'black'}
+                <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+              {/if}
+            </th>
+            <th class="sortable" on:click={() => handleColumnSort('result')}>
+              Result
+              {#if sortBy === 'result'}
+                <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+              {/if}
+            </th>
+            <th class="sortable" on:click={() => handleColumnSort('time_class')}>
+              Type
+              {#if sortBy === 'time_class'}
+                <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+              {/if}
+            </th>
+            <th class="sortable status-header" on:click={() => handleColumnSort('status')}>
+              Status
+              {#if sortBy === 'status'}
+                <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+              {/if}
+            </th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -410,9 +456,24 @@
           {#each displayedGames as game (game.id)}
             <tr>
               <td class="date-cell">{formatDate(game.game_date)}</td>
-              <td class="player-cell">{game.white_player || 'Unknown'}</td>
-              <td class="player-cell">{game.black_player || 'Unknown'}</td>
+              <td class="player-cell">
+                <span class:player-bold={playerName && game.white_player && game.white_player.toLowerCase() === playerName.toLowerCase().trim()}>
+                  {game.white_player || 'Unknown'}
+                </span>
+                {#if game.white_rating}
+                  <span class="rating">({game.white_rating})</span>
+                {/if}
+              </td>
+              <td class="player-cell">
+                <span class:player-bold={playerName && game.black_player && game.black_player.toLowerCase() === playerName.toLowerCase().trim()}>
+                  {game.black_player || 'Unknown'}
+                </span>
+                {#if game.black_rating}
+                  <span class="rating">({game.black_rating})</span>
+                {/if}
+              </td>
               <td class="result-cell">{game.result || 'N/A'}</td>
+              <td class="type-cell">{formatType(game.time_class)}</td>
               <td class="status-cell">
                 <span class="status-badge {getStatusBadgeClass(game.analysis_status)}">
                   {game.analysis_status}
@@ -460,11 +521,11 @@
           disabled={currentPage === 0}
           class="page-btn"
         >
-          Previous
+          ‹ Prev
         </button>
 
         <span class="page-info">
-          Page {currentPage + 1} of {totalPages}
+          {currentPage + 1} / {totalPages}
         </span>
 
         <button
@@ -472,7 +533,7 @@
           disabled={currentPage >= totalPages - 1}
           class="page-btn"
         >
-          Next
+          Next ›
         </button>
       </div>
     </div>
@@ -523,11 +584,38 @@
                     <span class="score {move.analysis.score_type === 'mate' ? 'mate-score' : ''}">
                       {move.analysis.score}
                     </span>
+                    {#if move.classification || move.special_classification}
+                      <!-- Inline classification icon -->
+                      {#if move.special_classification && move.special_classification.toLowerCase() === 'brilliant'}
+                        <img class="class-inline-icon" src="../../assets/classifications/brilliant.png" alt="brilliant" width="16" height="16" />
+                      {:else if move.special_classification && (move.special_classification.toLowerCase() === 'great move' || move.special_classification.toLowerCase() === 'great')}
+                        <img class="class-inline-icon" src="../../assets/classifications/great.png" alt="great move" width="16" height="16" />
+                      {:else if move.special_classification && move.special_classification.toLowerCase() === 'miss'}
+                        <img class="class-inline-icon" src="../../assets/classifications/miss.png" alt="miss" width="16" height="16" />
+                      {:else}
+                        {#if move.classification && move.classification.toLowerCase() === 'best'}
+                          <img class="class-inline-icon" src="../../assets/classifications/best.png" alt="best" width="16" height="16" />
+                        {:else if move.classification && move.classification.toLowerCase() === 'excellent'}
+                          <img class="class-inline-icon" src="../../assets/classifications/excellent.png" alt="excellent" width="16" height="16" />
+                        {:else if move.classification && move.classification.toLowerCase() === 'good'}
+                          <img class="class-inline-icon" src="../../assets/classifications/good.png" alt="good" width="16" height="16" />
+                        {:else if move.classification && move.classification.toLowerCase() === 'inaccuracy'}
+                          <img class="class-inline-icon" src="../../assets/classifications/inaccuracy.png" alt="inaccuracy" width="16" height="16" />
+                        {:else if move.classification && move.classification.toLowerCase() === 'mistake'}
+                          <img class="class-inline-icon" src="../../assets/classifications/mistake.png" alt="mistake" width="16" height="16" />
+                        {:else if move.classification && move.classification.toLowerCase() === 'blunder'}
+                          <img class="class-inline-icon" src="../../assets/classifications/blunder.png" alt="blunder" width="16" height="16" />
+                        {/if}
+                      {/if}
+                    {/if}
                   </div>
                   <div class="move-details">
                     <p><strong>Best move:</strong> {move.analysis.best_move || 'N/A'}</p>
                     {#if move.analysis.pv && move.analysis.pv.length > 0}
                       <p><strong>Principal variation:</strong> {move.analysis.pv.slice(0, 3).join(' ')}</p>
+                    {/if}
+                    {#if move.expected_points}
+                      <p><strong>EP:</strong> {move.expected_points.mover_before} → {move.expected_points.mover_after} (Δ {move.expected_points.gain ? `+${move.expected_points.gain}` : `-${move.expected_points.loss}`})</p>
                     {/if}
                   </div>
                 </div>
@@ -804,9 +892,24 @@
     color: #2c3e50;
   }
 
+  .player-bold {
+    font-weight: 700;
+  }
+
+  .rating {
+    color: #7f8c8d;
+    font-size: 0.875rem;
+    font-weight: 400;
+    margin-left: 0.5rem;
+  }
+
   .result-cell {
     font-weight: 600;
     color: #34495e;
+  }
+
+  .status-header {
+    text-align: center;
   }
 
   .status-cell {
@@ -1086,6 +1189,25 @@
 
   .move-details p {
     margin: 0.25rem 0;
+  }
+
+  /* Classification badge (shares style with GameView) */
+  .badge {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge-class {
+    background: #e8f4f8;
+    color: #2c3e50;
+    border: 1px solid #cde9f3;
+  }
+  .class-inline-icon {
+    margin-left: 0.4rem;
+    vertical-align: middle;
   }
 
   /* Responsive design */

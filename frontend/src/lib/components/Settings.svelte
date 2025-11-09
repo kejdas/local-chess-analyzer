@@ -138,9 +138,20 @@
     }
   }
 
+  import { applyTheme } from '../theme.js';
+
   onMount(() => {
-    loadSettings();
+    loadSettings().then(() => {
+      if (settings.theme) {
+        applyTheme(settings.theme);
+      }
+    });
   });
+
+  // React to theme changes immediately
+  $: if (settings && settings.theme !== undefined) {
+    applyTheme(settings.theme);
+  }
 </script>
 
 <div class="settings">

@@ -55,6 +55,9 @@ async def create_game(db: AsyncSession, game_data: Dict[str, Any]) -> Game:
         pgn=game_data['pgn'],
         white_player=game_data.get('white_player'),
         black_player=game_data.get('black_player'),
+        white_rating=game_data.get('white_rating'),
+        black_rating=game_data.get('black_rating'),
+        time_class=game_data.get('time_class'),
         result=game_data.get('result'),
         game_date=game_data.get('game_date'),
         analysis_status='queued'
@@ -124,6 +127,7 @@ async def get_all_games(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     status: Optional[str] = None,
+    time_class: Optional[str] = None,
     sort_by: str = 'date',
     sort_order: str = 'desc'
 ) -> List[Game]:
@@ -152,6 +156,8 @@ async def get_all_games(
         query = query.where(Game.game_date <= date_to)
     if status:
         query = query.where(Game.analysis_status == status)
+    if time_class:
+        query = query.where(Game.time_class == time_class)
 
     # Apply sorting
     sort_column = Game.game_date  # Default
@@ -161,6 +167,12 @@ async def get_all_games(
         sort_column = Game.analysis_status
     elif sort_by == 'date':
         sort_column = Game.game_date
+    elif sort_by == 'white':
+        sort_column = Game.white_player
+    elif sort_by == 'black':
+        sort_column = Game.black_player
+    elif sort_by == 'time_class':
+        sort_column = Game.time_class
 
     if sort_order == 'asc':
         query = query.order_by(sort_column.asc())
@@ -178,7 +190,8 @@ async def get_games_count(
     db: AsyncSession,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    time_class: Optional[str] = None
 ) -> int:
     """
     Get total count of games in the database with optional filters.
@@ -201,6 +214,8 @@ async def get_games_count(
         query = query.where(Game.game_date <= date_to)
     if status:
         query = query.where(Game.analysis_status == status)
+    if time_class:
+        query = query.where(Game.time_class == time_class)
 
     result = await db.execute(query)
     return result.scalar()

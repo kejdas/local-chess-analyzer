@@ -81,6 +81,7 @@ export async function getGames(skip = 0, limit = 100, filters = {}, sort = {}) {
   if (filters.date_from) params.append('date_from', filters.date_from);
   if (filters.date_to) params.append('date_to', filters.date_to);
   if (filters.status) params.append('status', filters.status);
+  if (filters.time_class) params.append('time_class', filters.time_class);
 
   // Add sorting
   if (sort.sort_by) params.append('sort_by', sort.sort_by);

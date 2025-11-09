@@ -99,6 +99,22 @@ class ChessComAPI:
         else:
             game_date = chess_game.headers.get('Date', '') if chess_game else ''
 
+        # Extract ratings from PGN headers
+        white_rating = None
+        black_rating = None
+        if chess_game:
+            white_elo = chess_game.headers.get('WhiteElo', '')
+            black_elo = chess_game.headers.get('BlackElo', '')
+            # Try to parse as integer, handle empty strings or invalid values
+            try:
+                white_rating = int(white_elo) if white_elo and white_elo.strip() else None
+            except (ValueError, TypeError):
+                white_rating = None
+            try:
+                black_rating = int(black_elo) if black_elo and black_elo.strip() else None
+            except (ValueError, TypeError):
+                black_rating = None
+
         # Create unique Chess.com ID from URL
         game_url = game.get('url', '')
         chess_com_id = game_url.split('/')[-1] if game_url else f"{white_player}_{black_player}_{game_timestamp}"
@@ -108,6 +124,8 @@ class ChessComAPI:
             'pgn': pgn_text,
             'white_player': white_player,
             'black_player': black_player,
+            'white_rating': white_rating,
+            'black_rating': black_rating,
             'result': result,
             'game_date': game_date,
             'url': game_url,

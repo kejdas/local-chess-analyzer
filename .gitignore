@@ -1,0 +1,61 @@
+# General
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+**/.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.sublime-*
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Node / Frontend (project-level cache/build)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.svelte-kit/
+frontend/.cache/
+
+# Svelte/Vite local files
+frontend/*.local
+
+# Docker / runtime
+*.pid
+
+# Data (local runtime artifacts)
+data/*.db
+data/*.sqlite
+data/backups/**
+data/analysis/**
+!data/.gitkeep
+!data/analysis/.gitkeep
+
+# OS-specific
+.AppleDouble
+.LSOverride
+Icon?
+
+

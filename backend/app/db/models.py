@@ -9,6 +9,9 @@ class Game(Base):
     pgn = Column(Text, nullable=False)
     white_player = Column(String)
     black_player = Column(String)
+    white_rating = Column(Integer)
+    black_rating = Column(Integer)
+    time_class = Column(String)  # bullet | blitz | rapid | daily | other
     result = Column(String)
     game_date = Column(String)
     import_date = Column(TIMESTAMP, server_default=func.now())
@@ -20,4 +23,4 @@ class Setting(Base):
 
     key = Column(String, primary_key=True, unique=True, nullable=False)
     value = Column(String)
-    
+

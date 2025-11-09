@@ -23,6 +23,9 @@ class GameResponse(BaseModel):
     pgn: Optional[str] = None
     white_player: Optional[str] = None
     black_player: Optional[str] = None
+    white_rating: Optional[int] = None
+    black_rating: Optional[int] = None
+    time_class: Optional[str] = None
     result: Optional[str] = None
     game_date: Optional[str] = None
     import_date: datetime
@@ -51,6 +54,7 @@ async def get_games(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     status: Optional[str] = None,
+    time_class: Optional[str] = None,
     sort_by: Optional[str] = 'date',
     sort_order: Optional[str] = 'desc',
     db: AsyncSession = Depends(get_db_session)
@@ -65,6 +69,7 @@ async def get_games(
         date_from: Filter games from this date (format: YYYY-MM-DD)
         date_to: Filter games to this date (format: YYYY-MM-DD)
         status: Filter by analysis status (queued/analyzing/completed)
+        time_class: Filter by game speed (bullet/blitz/rapid/daily/other)
         sort_by: Field to sort by (date/result/status)
         sort_order: Sort order (asc/desc)
 
@@ -85,6 +90,7 @@ async def get_games(
         date_from=date_from_db,
         date_to=date_to_db,
         status=status,
+        time_class=time_class,
         sort_by=sort_by,
         sort_order=sort_order
     )
@@ -92,7 +98,8 @@ async def get_games(
         db,
         date_from=date_from_db,
         date_to=date_to_db,
-        status=status
+        status=status,
+        time_class=time_class
     )
 
     # Convert to response models and check for analysis files
@@ -103,6 +110,9 @@ async def get_games(
             "chess_com_id": game.chess_com_id,
             "white_player": game.white_player,
             "black_player": game.black_player,
+            "white_rating": game.white_rating,
+            "black_rating": game.black_rating,
+            "time_class": game.time_class,
             "result": game.result,
             "game_date": game.game_date,
             "import_date": game.import_date,
@@ -173,6 +183,9 @@ async def get_game(
         "pgn": game.pgn,
         "white_player": game.white_player,
         "black_player": game.black_player,
+        "white_rating": game.white_rating,
+        "black_rating": game.black_rating,
+        "time_class": game.time_class,
         "result": game.result,
         "game_date": game.game_date,
         "import_date": game.import_date,

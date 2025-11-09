@@ -9,6 +9,7 @@
   import GameView from './lib/components/GameView.svelte';
   import SetupWizard from './lib/components/SetupWizard.svelte';
   import { getSettings } from './lib/api/client.js';
+  import { applyTheme } from './lib/theme.js';
 
   const routes = {
     '/': Home,
@@ -28,6 +29,10 @@
       // Show wizard if chess_com_username is not set (null or empty)
       if (!settings.chess_com_username || settings.chess_com_username === 'null') {
         showWizard = true;
+      }
+      // Apply theme from settings
+      if (settings.theme) {
+        applyTheme(settings.theme);
       }
     } catch (error) {
       console.error('Failed to check settings:', error);

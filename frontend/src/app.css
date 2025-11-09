@@ -86,3 +86,272 @@ button:disabled {
 .mt-3 {
   margin-top: 1.5rem;
 }
+
+/* Dark theme overrides */
+body.theme-dark {
+  background-color: #0f172a;
+  color: #e5e7eb;
+}
+
+body.theme-dark h1,
+body.theme-dark h2,
+body.theme-dark h3,
+body.theme-dark h4,
+body.theme-dark h5,
+body.theme-dark h6 {
+  color: #e5e7eb;
+}
+
+/* App containers */
+body.theme-dark main,
+body.theme-dark .checking-setup {
+  background: #0b1220;
+}
+
+/* Card-like sections */
+body.theme-dark .settings-section,
+body.theme-dark .table-container,
+body.theme-dark .game-container,
+body.theme-dark .modal-content,
+body.theme-dark .moves-section .move-button,
+body.theme-dark .results-summary,
+body.theme-dark .analysis-settings,
+body.theme-dark .game-info {
+  background: #111827;
+  color: #e5e7eb;
+  border-color: #374151;
+}
+
+/* Analysis modal specifics (Games page) */
+body.theme-dark .modal-header {
+  border-bottom: 1px solid #374151;
+}
+body.theme-dark .modal-header h2 {
+  color: #e5e7eb;
+}
+body.theme-dark .close-btn {
+  color: #cbd5e1;
+}
+body.theme-dark .close-btn:hover {
+  color: #f87171;
+}
+body.theme-dark .analysis-section h3 {
+  color: #e5e7eb;
+}
+body.theme-dark .moves-list .move-card {
+  background: #0b1220;
+  color: #e5e7eb;
+  border-left: 4px solid #60a5fa;
+}
+body.theme-dark .move-header {
+  color: #e5e7eb;
+}
+body.theme-dark .move-notation {
+  background: #1f2937;
+  color: #e5e7eb;
+}
+body.theme-dark .move-details {
+  color: #cbd5e1;
+}
+/* Ensure paragraph text in modal sections is light */
+body.theme-dark .game-info p,
+body.theme-dark .analysis-settings p {
+  color: #e5e7eb;
+}
+
+/* Game view specifics */
+body.theme-dark .eval-score {
+  background: #0b1220;
+  color: #e5e7eb;
+  border-color: #374151;
+}
+body.theme-dark .eval-bar {
+  border-color: #374151;
+}
+body.theme-dark .eval-bar-black {
+  background: #1f2937;
+}
+body.theme-dark .eval-bar-white {
+  background: #e5e7eb;
+}
+body.theme-dark .player-row .player-name .name {
+  color: #e5e7eb;
+}
+body.theme-dark .player-row .player-name .rating {
+  color: #9ca3af;
+}
+
+/* Tables and borders */
+body.theme-dark table {
+  color: #e5e7eb;
+}
+body.theme-dark tbody tr {
+  border-bottom-color: #374151;
+}
+body.theme-dark thead {
+  background: #1f2937;
+  color: #e5e7eb;
+}
+body.theme-dark tbody tr:hover {
+  background: #1f2937;
+}
+
+/* Inputs and selects */
+body.theme-dark input[type="text"],
+body.theme-dark input[type="number"],
+body.theme-dark input[type="date"],
+body.theme-dark select {
+  background: #0b1220;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+body.theme-dark input:disabled {
+  background: #0b1220;
+}
+body.theme-dark .help-text {
+  color: #9ca3af;
+}
+body.theme-dark label,
+body.theme-dark .settings-section h2 {
+  color: #e5e7eb;
+}
+
+/* Buttons keep their brand colors; adjust hover contrast slightly */
+body.theme-dark .btn-secondary {
+  background: #4b5563;
+  color: #e5e7eb;
+}
+body.theme-dark .btn-secondary:hover:not(:disabled) {
+  background: #6b7280;
+}
+
+/* Misc */
+body.theme-dark .loading,
+body.theme-dark .error,
+body.theme-dark .empty {
+  color: #e5e7eb;
+  background: #111827;
+  border-color: #374151;
+}
+
+/* Dark theme: move list buttons */
+body.theme-dark .moves-section .move-button {
+  background: #0b1220;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+body.theme-dark .moves-section .move-button:hover {
+  background: #111827;
+  border-color: #60a5fa;
+}
+
+/* Dark theme: alerts */
+body.theme-dark .alert-success {
+  background: #064e3b;
+  border-color: #10b981;
+  color: #d1fae5;
+}
+body.theme-dark .alert-error {
+  background: #7f1d1d;
+  border-color: #f87171;
+  color: #fee2e2;
+}
+
+/* Dark theme: status badges (stronger contrast) */
+body.theme-dark .status-badge {
+  border: 1px solid transparent;
+}
+body.theme-dark .status-completed {
+  background: rgba(16, 185, 129, 0.18); /* emerald-500 */
+  color: #a7f3d0; /* emerald-200 */
+  border-color: rgba(16, 185, 129, 0.4);
+}
+body.theme-dark .status-analyzing {
+  background: rgba(245, 158, 11, 0.18); /* amber-500 */
+  color: #fde68a; /* amber-200 */
+  border-color: rgba(245, 158, 11, 0.4);
+}
+body.theme-dark .status-queued {
+  background: rgba(59, 130, 246, 0.18); /* blue-500 */
+  color: #bfdbfe; /* blue-200 */
+  border-color: rgba(59, 130, 246, 0.4);
+}
+body.theme-dark .status-unknown {
+  background: rgba(239, 68, 68, 0.18); /* red-500 */
+  color: #fecaca; /* red-200 */
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* Dark theme: classification badges */
+body.theme-dark .badge-class {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+
+/* Games list text colors */
+body.theme-dark .player-cell {
+  color: #e5e7eb;
+}
+body.theme-dark .result-cell {
+  color: #e5e7eb;
+}
+body.theme-dark .type-cell {
+  color: #e5e7eb;
+}
+
+/* Home page cards */
+body.theme-dark .card {
+  background: #111827;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+body.theme-dark .card h2 {
+  color: #e5e7eb;
+}
+body.theme-dark .stat-item {
+  background: #0b1220;
+}
+body.theme-dark .stat-label {
+  color: #9ca3af;
+}
+body.theme-dark .stat-value {
+  color: #e5e7eb;
+}
+body.theme-dark .status {
+  background: #0b1220;
+}
+body.theme-dark .sync-result.success {
+  background: #064e3b;
+  border-color: #10b981;
+  color: #d1fae5;
+}
+body.theme-dark .sync-result.error {
+  background: #7f1d1d;
+  border-color: #f87171;
+  color: #fee2e2;
+}
+body.theme-dark .info-text {
+  background: #0b1220;
+  color: #e5e7eb;
+}
+body.theme-dark .card-link {
+  color: #93c5fd;
+}
+
+/* Pagination (games list) */
+body.theme-dark .pagination-info,
+body.theme-dark .page-info {
+  color: #e5e7eb;
+}
+body.theme-dark .page-btn {
+  background: #2563eb; /* blue-600 */
+  color: #ffffff;
+}
+body.theme-dark .page-btn:hover:not(:disabled) {
+  background: #1d4ed8; /* blue-700 */
+}
+body.theme-dark .page-btn:disabled {
+  background: #334155; /* slate-700 */
+  color: #cbd5e1;
+}
