@@ -289,6 +289,13 @@ body.theme-dark .badge-class {
   border: 1px solid #374151;
 }
 
+/* Dark theme: board clock overlays */
+body.theme-dark .clock-overlay {
+  background: rgba(17, 24, 39, 0.95); /* slate-900-ish */
+  border-color: #374151; /* slate-700 */
+  color: #e5e7eb; /* slate-200 */
+}
+
 /* Games list text colors */
 body.theme-dark .player-cell {
   color: #e5e7eb;

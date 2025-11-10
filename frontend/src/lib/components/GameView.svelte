@@ -151,8 +151,8 @@
         }
       }
 
-      // Parse clocks from PGN (if present)
-      parseClocksFromPgn(game.pgn);
+      // Parse clocks from PGN (if present) using the extracted move list
+      parseClocksFromPgn(game.pgn, moves);
 
       loading = false;
 
@@ -167,14 +167,14 @@
     }
   }
 
-  // Parse move clocks from PGN comments like {%clk 1:23:45} or [%clk 1:23:45]
-  function parseClocksFromPgn(pgnText) {
+  // Parse move clocks from PGN comments like {%clk 1:23:45} or [%clk 1:23:45.8]
+  function parseClocksFromPgn(pgnText, movesList = []) {
     whiteClocksByMove = [];
     blackClocksByMove = [];
 
     try {
-      // Match both {%clk H:MM:SS} and [%clk H:MM:SS] and also MM:SS
-      const clkRegex = /[\[{]\s*%?clk\s+([0-9]?\d:[0-5]\d(?::[0-5]\d)?)[\]}]/gi;
+      // Match {%clk H:MM[:SS[.ff]]} or [%clk ...], allow fractional seconds
+      const clkRegex = /[\[{]\s*%?clk\s+(\d{1,2}:[0-5]\d(?::[0-5]\d(?:\.\d+)?)?)[\]}]/gi;
       const found = [];
       let m;
       while ((m = clkRegex.exec(pgnText)) !== null) {
@@ -184,7 +184,7 @@
         return;
       }
       // Assign sequentially to moves in order; each clock corresponds to the player who just moved
-      const verboseMoves = chess.history({ verbose: true });
+      const verboseMoves = movesList;
       for (let i = 0; i < verboseMoves.length && i < found.length; i++) {
         const mv = verboseMoves[i];
         const clk = found[i];
@@ -194,8 +194,6 @@
           blackClocksByMove[i] = clk;
         }
       }
-      // Reset back to current position after reading verbose
-      chess.reset();
     } catch (e) {
       console.warn('[GameView] Failed to parse clocks from PGN', e);
     }
@@ -874,14 +872,15 @@
     text-align: center;
     color: #2c3e50;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    z-index: 4;
   }
   .clock-top-right {
-    top: 8px;
-    right: 8px;
+    top: -32px; /* place above the board */
+    right: 0;
   }
   .clock-bottom-right {
-    bottom: 8px;
-    right: 8px;
+    bottom: -32px; /* place below the board */
+    right: 0;
   }
 
   .class-icon-overlay {
