@@ -92,7 +92,7 @@ local-chess-analyzer/
 
 1. Clone the repository:
 ```bash
-cd /root/docker/local-chess-analyzer
+cd local-chess-analyzer
 ```
 
 2. Build and start the containers:
@@ -108,7 +108,7 @@ docker compose -f docker-compose.yml up --build
 ### Stopping the Application
 
 ```bash
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml down
+docker compose -f docker-compose.yml down
 ```
 
 ## API Endpoints
@@ -164,7 +164,7 @@ GET http://localhost:42069/api/games/stats
 | pgn              | Text      | Full game in PGN notation                |
 | white_player     | String    | White player username                    |
 | black_player     | String    | Black player username                    |
-| result           | String    | Game result (1-0, 0-1, 1/2-1/2)         |
+| result           | String    | Game result (1-0, 0-1, 1/2-1/2)          |
 | game_date        | String    | Date the game was played                 |
 | import_date      | Timestamp | When the game was imported               |
 | analysis_status  | String    | queued / analyzing / completed           |
@@ -252,30 +252,30 @@ Tested with Chess.com user "hikaru" (October 2025):
 
 Backend only:
 ```bash
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml up -d --build backend
+docker compose -f docker-compose.yml up -d --build backend
 ```
 
 Frontend only:
 ```bash
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml up -d --build frontend
+docker compose -f docker-compose.yml up -d --build frontend
 ```
 
 Both services:
 ```bash
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml up --build
+docker compose -f docker-compose.yml up --build
 ```
 
 ### Viewing Logs
 
 ```bash
 # All services
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml logs -f
+docker compose -f docker-compose.yml logs -f
 
 # Backend only
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml logs -f backend
+docker compose -f docker-compose.yml logs -f backend
 
 # Frontend only
-docker compose -f /root/docker/local-chess-analyzer/docker-compose.yml logs -f frontend
+docker compose -f docker-compose.yml logs -f frontend
 ```
 
 ## Roadmap
