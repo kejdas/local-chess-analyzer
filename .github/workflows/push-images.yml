@@ -69,8 +69,8 @@ jobs:
       - name: Also tag latest when pushing to default branch
         if: github.ref_name == 'main'
         run: |
-          docker buildx imagetools create -t ${{ steps.vars.outputs.owner }}/local-chess-analyzer-backend:latest \
+          docker buildx imagetools create -t ghcr.io/${{ steps.vars.outputs.owner }}/local-chess-analyzer-backend:latest \
             ${{ steps.vars.outputs.backend_branch }}
-          docker buildx imagetools create -t ${{ steps.vars.outputs.owner }}/local-chess-analyzer-frontend:latest \
+          docker buildx imagetools create -t ghcr.io/${{ steps.vars.outputs.owner }}/local-chess-analyzer-frontend:latest \
             ${{ steps.vars.outputs.frontend_branch }}
 
