@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { getGames, startSync, getSyncStatus, getSettings, analyzeGame, getGameAnalysis } from '../api/client.js';
+  import { getGames, startSync, getSyncStatus, getSettings, analyzeGame, getGameAnalysis, bulkAnalyzeGames } from '../api/client.js';
 
   // State
   let games = [];
@@ -26,6 +26,14 @@
   let selectedAnalysis = null; // Currently viewed analysis
   let showAnalysisModal = false; // Show/hide analysis modal
   let analysisError = null;
+  let analyzingPage = false; // Bulk-analyzing current page
+  let pageAnalysisProgress = 0;
+  let pageAnalysisTotal = 0;
+  let pageAnalysisError = null;
+
+  // Derived flags for UX
+  $: isAnalysisInProgress = analyzingPage || (analyzingGames && analyzingGames.size > 0);
+  $: displayedAnalyzingGames = displayedGames.filter(g => analyzingGames.has(g.id));
 
   // Computed
   $: totalPages = Math.ceil(total / pageSize);
@@ -73,13 +81,13 @@
   let hasInitialLoad = false;
 
   // Reload games when filters change (but not on initial mount)
-  $: if (hasInitialLoad && (dateFrom || dateTo || statusFilter !== 'all' || timeClassFilter !== 'all')) {
+  $: if (hasInitialLoad && !isAnalysisInProgress && (dateFrom || dateTo || statusFilter !== 'all' || timeClassFilter !== 'all')) {
     currentPage = 0;
     loadGames();
   }
 
   // Also reload when clearing filters back to defaults
-  $: if (hasInitialLoad && !dateFrom && !dateTo && statusFilter === 'all' && timeClassFilter === 'all') {
+  $: if (hasInitialLoad && !isAnalysisInProgress && !dateFrom && !dateTo && statusFilter === 'all' && timeClassFilter === 'all') {
     loadGames();
   }
 
@@ -128,6 +136,7 @@
   }
 
   function handleColumnSort(column) {
+    if (isAnalysisInProgress) return;
     if (sortBy === column) {
       // Toggle sort order if clicking same column
       sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
@@ -191,6 +200,7 @@
   }
 
   function goToPage(page) {
+    if (isAnalysisInProgress) return;
     currentPage = page;
     loadGames();
   }
@@ -227,6 +237,13 @@
     }
   }
 
+  function getEffectiveStatus(game) {
+    if (analyzingGames.has(game.id) && !game.has_analysis) {
+      return 'analyzing';
+    }
+    return game.analysis_status;
+  }
+
   async function handleAnalyzeGame(gameId) {
     analyzingGames.add(gameId);
     analyzingGames = analyzingGames; // Trigger reactivity
@@ -236,11 +253,21 @@
       const result = await analyzeGame(gameId);
       console.log('[Games] Analysis completed:', result);
 
-      // Reload games to update status
-      await loadGames();
+      // Update local state without forcing a refresh
+      const idx = games.findIndex(g => g.id === gameId);
+      if (idx !== -1) {
+        const updated = { ...games[idx] };
+        updated.analysis_status = 'completed';
+        updated.has_analysis = true;
+        games[idx] = updated;
+        games = [...games];
+      }
 
       // Show success message
-      syncSuccess = `Game analyzed successfully! ${result.total_moves} moves analyzed.`;
+      const movesMsg = typeof result?.total_moves === 'number'
+        ? `${result.total_moves} moves analyzed.`
+        : (result?.status === 'already_completed' ? 'Already analyzed.' : 'Analysis completed.');
+      syncSuccess = `Game analyzed successfully! ${movesMsg}`;
       setTimeout(() => syncSuccess = null, 5000);
     } catch (err) {
       console.error('[Games] Analysis failed:', err);
@@ -249,6 +276,100 @@
     } finally {
       analyzingGames.delete(gameId);
       analyzingGames = analyzingGames; // Trigger reactivity
+    }
+  }
+
+  async function handleAnalyzePage() {
+    const ids = displayedGames.map(g => g.id);
+    if (!ids.length) return;
+    pageAnalysisError = null;
+    analyzingPage = true;
+    pageAnalysisTotal = ids.length;
+    pageAnalysisProgress = 0;
+
+    // Mark all displayed games as analyzing for UI feedback
+    for (const id of ids) {
+      analyzingGames.add(id);
+    }
+    analyzingGames = new Set(analyzingGames);
+
+    try {
+      // Always run client-side concurrent analysis to get immediate per-game updates
+      const concurrency = 4;
+      function markAnalyzing(gameId, on) {
+        if (on) {
+          analyzingGames.add(gameId);
+        } else {
+          analyzingGames.delete(gameId);
+        }
+        analyzingGames = new Set(analyzingGames);
+      }
+      async function runWithConcurrency(tasks, limit) {
+        let running = 0;
+        let index = 0;
+        return new Promise((resolve) => {
+          function next() {
+            if (index >= tasks.length && running === 0) return resolve();
+            while (running < limit && index < tasks.length) {
+              const i = index++;
+              running++;
+              tasks[i]()
+                .catch(() => {})
+                .finally(() => {
+                  running--;
+                  pageAnalysisProgress += 1;
+                  next();
+                });
+            }
+          }
+          next();
+        });
+      }
+      let failedCount = 0;
+      const tasks = ids.map((gameId) => async () => {
+        try {
+          markAnalyzing(gameId, true);
+          await analyzeGame(gameId);
+          // Update local game status to completed and enable View Analysis
+          const idx = games.findIndex(g => g.id === gameId);
+          if (idx !== -1) {
+            const updated = { ...games[idx] };
+            updated.analysis_status = 'completed';
+            updated.has_analysis = true;
+            games[idx] = updated;
+            games = [...games];
+          }
+        } catch (err) {
+          console.error('Analyze failed for game', gameId, err);
+          failedCount += 1;
+          const idx = games.findIndex(g => g.id === gameId);
+          if (idx !== -1) {
+            const updated = { ...games[idx] };
+            updated.analysis_status = 'queued';
+            games[idx] = updated;
+            games = [...games];
+          }
+        } finally {
+          // Remove from analyzing summary immediately upon finishing
+          markAnalyzing(gameId, false);
+        }
+      });
+      await runWithConcurrency(tasks, concurrency);
+      if (failedCount === 0) {
+        syncSuccess = `Analyzed ${ids.length} game${ids.length === 1 ? '' : 's'} successfully.`;
+        setTimeout(() => (syncSuccess = null), 5000);
+      } else {
+        pageAnalysisError = `Completed ${ids.length - failedCount}/${ids.length}. ${failedCount} failed.`;
+      }
+    } finally {
+      // Clear analyzing flags for the displayed ids
+      for (const id of ids) {
+        analyzingGames.delete(id);
+      }
+      analyzingGames = new Set(analyzingGames);
+      analyzingPage = false;
+      // Single refresh at the very end to reconcile anything we might have missed
+      await loadGames();
     }
   }
 
@@ -278,13 +399,44 @@
 <div class="games-page">
   <div class="header">
     <h1>Game Library</h1>
-    <button
-      class="sync-btn"
-      on:click={handleSync}
-      disabled={syncing}
-    >
-      {syncing ? 'Syncing...' : 'Fetch New Games'}
-    </button>
+    <div class="header-actions">
+      <button
+        class="sync-btn"
+        on:click={handleSync}
+        disabled={syncing || isAnalysisInProgress}
+      >
+        {syncing ? 'Syncing...' : 'Fetch New Games'}
+      </button>
+      <button
+        class="sync-btn analyze-page-btn"
+        on:click={handleAnalyzePage}
+        disabled={analyzingPage || displayedGames.length === 0}
+      >
+        {analyzingPage
+          ? 'Analyzing...'
+          : 'Analyze This Page'}
+      </button>
+      {#if isAnalysisInProgress}
+        <div class="analysis-progress">
+          <div class="progress-label">
+            {analyzingPage ? `Analyzing ${pageAnalysisTotal || displayedAnalyzingGames.length} games on this page...` : `Analyzing ${displayedAnalyzingGames.length} game${displayedAnalyzingGames.length === 1 ? '' : 's'}...`}
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: {pageAnalysisTotal ? Math.min(100, Math.round((pageAnalysisProgress / pageAnalysisTotal) * 100)) : 100}%"></div>
+          </div>
+          {#if displayedAnalyzingGames.length > 0}
+            <div class="progress-list">
+              {#each displayedAnalyzingGames.slice(0, 4) as g}
+                <span class="progress-pill">{g.white_player || 'White'} vs {g.black_player || 'Black'}</span>
+              {/each}
+              {#if displayedAnalyzingGames.length > 4}
+                <span class="progress-more">+{displayedAnalyzingGames.length - 4} more</span>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
   </div>
 
   <!-- Sync feedback messages -->
@@ -306,6 +458,13 @@
     <div class="alert alert-error">
       {analysisError}
       <button class="alert-close" on:click={() => analysisError = null}>×</button>
+    </div>
+  {/if}
+
+  {#if pageAnalysisError}
+    <div class="alert alert-error">
+      {pageAnalysisError}
+      <button class="alert-close" on:click={() => pageAnalysisError = null}>×</button>
     </div>
   {/if}
 
@@ -413,37 +572,37 @@
       <table>
         <thead>
           <tr>
-            <th class="sortable" on:click={() => handleColumnSort('date')}>
+            <th class="sortable {isAnalysisInProgress ? 'disabled' : ''}" on:click={() => !isAnalysisInProgress && handleColumnSort('date')}>
               Date
               {#if sortBy === 'date'}
                 <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
               {/if}
             </th>
-            <th class="sortable" on:click={() => handleColumnSort('white')}>
+            <th class="sortable {isAnalysisInProgress ? 'disabled' : ''}" on:click={() => !isAnalysisInProgress && handleColumnSort('white')}>
               White
               {#if sortBy === 'white'}
                 <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
               {/if}
             </th>
-            <th class="sortable" on:click={() => handleColumnSort('black')}>
+            <th class="sortable {isAnalysisInProgress ? 'disabled' : ''}" on:click={() => !isAnalysisInProgress && handleColumnSort('black')}>
               Black
               {#if sortBy === 'black'}
                 <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
               {/if}
             </th>
-            <th class="sortable" on:click={() => handleColumnSort('result')}>
+            <th class="sortable {isAnalysisInProgress ? 'disabled' : ''}" on:click={() => !isAnalysisInProgress && handleColumnSort('result')}>
               Result
               {#if sortBy === 'result'}
                 <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
               {/if}
             </th>
-            <th class="sortable" on:click={() => handleColumnSort('time_class')}>
+            <th class="sortable {isAnalysisInProgress ? 'disabled' : ''}" on:click={() => !isAnalysisInProgress && handleColumnSort('time_class')}>
               Type
               {#if sortBy === 'time_class'}
                 <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
               {/if}
             </th>
-            <th class="sortable status-header" on:click={() => handleColumnSort('status')}>
+            <th class="sortable status-header {isAnalysisInProgress ? 'disabled' : ''}" on:click={() => !isAnalysisInProgress && handleColumnSort('status')}>
               Status
               {#if sortBy === 'status'}
                 <span class="sort-indicator">{sortOrder === 'asc' ? '↑' : '↓'}</span>
@@ -475,8 +634,8 @@
               <td class="result-cell">{game.result || 'N/A'}</td>
               <td class="type-cell">{formatType(game.time_class)}</td>
               <td class="status-cell">
-                <span class="status-badge {getStatusBadgeClass(game.analysis_status)}">
-                  {game.analysis_status}
+                <span class="status-badge {getStatusBadgeClass(getEffectiveStatus(game))}">
+                  {getEffectiveStatus(game)}
                 </span>
               </td>
               <td class="actions-cell">
@@ -518,7 +677,7 @@
       <div class="pagination-controls">
         <button
           on:click={prevPage}
-          disabled={currentPage === 0}
+          disabled={currentPage === 0 || isAnalysisInProgress}
           class="page-btn"
         >
           ‹ Prev
@@ -530,7 +689,7 @@
 
         <button
           on:click={nextPage}
-          disabled={currentPage >= totalPages - 1}
+          disabled={currentPage >= totalPages - 1 || isAnalysisInProgress}
           class="page-btn"
         >
           Next ›
@@ -541,8 +700,20 @@
 
   <!-- Analysis Modal -->
   {#if showAnalysisModal && selectedAnalysis}
-    <div class="modal-overlay" on:click={closeAnalysisModal}>
-      <div class="modal-content" on:click|stopPropagation>
+    <div
+      class="modal-overlay"
+      role="button"
+      tabindex="0"
+      aria-label="Close analysis modal"
+      on:click={closeAnalysisModal}
+      on:keydown={(e) => {
+        if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          closeAnalysisModal();
+        }
+      }}
+    >
+      <div class="modal-content" role="dialog" aria-modal="true" tabindex="-1" on:mousedown|stopPropagation>
         <div class="modal-header">
           <h2>Game Analysis</h2>
           <button class="close-btn" on:click={closeAnalysisModal}>×</button>
@@ -642,6 +813,13 @@
     margin-bottom: 2rem;
   }
 
+  .header-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+  }
+
   h1 {
     margin: 0;
     color: #2c3e50;
@@ -666,6 +844,62 @@
   .sync-btn:disabled {
     background: #95a5a6;
     cursor: not-allowed;
+  }
+
+  .analyze-page-btn {
+    background: #3498db;
+  }
+
+  .analyze-page-btn:hover:not(:disabled) {
+    background: #2980b9;
+  }
+
+  .analysis-progress {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .progress-label {
+    font-size: 0.85rem;
+    color: #34495e;
+    text-align: right;
+  }
+
+  .progress-bar {
+    height: 8px;
+    background: #ecf0f1;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  .progress-list {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .progress-pill {
+    background: #e8f4f8;
+    border: 1px solid #cde9f3;
+    color: #2c3e50;
+    border-radius: 12px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .progress-more {
+    color: #7f8c8d;
+    font-size: 0.75rem;
   }
 
   .alert {
@@ -862,6 +1096,12 @@
 
   th.sortable:hover {
     background: #2c3e50;
+  }
+
+  th.sortable.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+    cursor: default;
   }
 
   .sort-indicator {
