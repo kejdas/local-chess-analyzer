@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, field_serializer
 from datetime import datetime
+import asyncio
 
 from ..db.database import get_db_session
 from ..crud import games as crud_games
@@ -12,6 +13,7 @@ from ..services.stockfish_service import (
     get_game_analysis,
     has_game_analysis
 )
+from ..db.database import async_session
 
 
 router = APIRouter()
@@ -296,4 +298,114 @@ async def get_analysis(
         "success": True,
         "game_id": game_id,
         "analysis": analysis
+    }
+
+
+class BulkAnalyzeRequest(BaseModel):
+    game_ids: List[int]
+    concurrency: Optional[int] = 3
+    skip_already_analyzed: Optional[bool] = True
+
+
+@router.post("/api/games/bulk-analyze")
+async def bulk_analyze_games(
+    request: BulkAnalyzeRequest,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Analyze multiple games in parallel on the server with a concurrency cap.
+    Returns a summary of results when all requested analyses complete.
+    """
+    if not request.game_ids:
+        raise HTTPException(status_code=400, detail="No game IDs provided")
+
+    # Sanitize concurrency
+    concurrency = request.concurrency or 1
+    if concurrency < 1:
+        concurrency = 1
+    if concurrency > 8:
+        concurrency = 8
+
+    # Filter out already analyzed if requested
+    to_analyze_ids: List[int] = []
+    already_completed = 0
+    for gid in request.game_ids:
+        if request.skip_already_analyzed and has_game_analysis(gid):
+            already_completed += 1
+            continue
+        to_analyze_ids.append(gid)
+
+    if not to_analyze_ids:
+        return {
+            "success": True,
+            "message": "No games to analyze",
+            "requested": len(request.game_ids),
+            "already_completed": already_completed,
+            "started": 0,
+            "completed": 0,
+            "failed": 0,
+            "details": []
+        }
+
+    semaphore = asyncio.Semaphore(concurrency)
+    results: List[Dict[str, Any]] = []
+    completed = 0
+    failed = 0
+
+    async def analyze_one(game_id: int):
+        nonlocal completed, failed
+        async with semaphore:
+            # Use an independent DB session for each task
+            async with async_session() as task_db:
+                # Fetch the game
+                game = await crud_games.get_game_by_id(task_db, game_id)
+                if not game:
+                    failed += 1
+                    results.append({
+                        "game_id": game_id,
+                        "status": "not_found"
+                    })
+                    return
+
+                # If analysis file was created since filtering, skip
+                if request.skip_already_analyzed and has_game_analysis(game_id):
+                    results.append({
+                        "game_id": game_id,
+                        "status": "already_completed"
+                    })
+                    return
+
+                try:
+                    await crud_games.update_game_analysis_status(task_db, game_id, "analyzing")
+                    await analyze_game_async(
+                        game_id=game_id,
+                        pgn_text=game.pgn,
+                        db=task_db
+                    )
+                    await crud_games.update_game_analysis_status(task_db, game_id, "completed")
+                    completed += 1
+                    results.append({
+                        "game_id": game_id,
+                        "status": "completed"
+                    })
+                except Exception as e:
+                    await crud_games.update_game_analysis_status(task_db, game_id, "queued")
+                    failed += 1
+                    results.append({
+                        "game_id": game_id,
+                        "status": "failed",
+                        "error": str(e)
+                    })
+
+    await asyncio.gather(*(analyze_one(gid) for gid in to_analyze_ids))
+
+    return {
+        "success": True,
+        "message": "Bulk analysis completed",
+        "requested": len(request.game_ids),
+        "already_completed": already_completed,
+        "started": len(to_analyze_ids),
+        "completed": completed,
+        "failed": failed,
+        "details": results
     }
