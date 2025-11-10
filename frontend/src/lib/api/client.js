@@ -163,3 +163,14 @@ export async function analyzeGame(gameId) {
 export async function getGameAnalysis(gameId) {
   return apiFetch(`/api/games/${gameId}/analysis`);
 }
+
+export async function bulkAnalyzeGames(gameIds, concurrency = 3, skipAlreadyAnalyzed = true) {
+  return apiFetch('/api/games/bulk-analyze', {
+    method: 'POST',
+    body: JSON.stringify({
+      game_ids: gameIds,
+      concurrency,
+      skip_already_analyzed: skipAlreadyAnalyzed,
+    }),
+  });
+}
