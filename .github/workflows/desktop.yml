@@ -1,0 +1,103 @@
+name: Build Desktop Installers
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: frontend-dist
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  build-desktop:
+    needs: build-frontend
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps and build single-file binary
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pyinstaller uvicorn
+          pyinstaller --onefile --name lca-backend \
+            --add-data "stockfish/stockfish_binary:stockfish" \
+            backend/run_backend.py
+        shell: bash
+
+      - name: Place backend sidecar in Tauri bin
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            mkdir -p src-tauri/bin/windows
+            cp dist/lca-backend.exe src-tauri/bin/windows/lca-backend.exe
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            mkdir -p src-tauri/bin/macos
+            cp dist/lca-backend src-tauri/bin/macos/lca-backend
+            chmod +x src-tauri/bin/macos/lca-backend
+          else
+            mkdir -p src-tauri/bin/linux
+            cp dist/lca-backend src-tauri/bin/linux/lca-backend
+            chmod +x src-tauri/bin/linux/lca-backend
+          fi
+        shell: bash
+
+      - name: Install Tauri CLI
+        run: npm install --global @tauri-apps/cli
+        shell: bash
+
+      - name: Build Tauri bundle
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: .
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseDraft: ${{ startsWith(github.ref, 'refs/tags/') && 'false' || 'true' }}
+          prerelease: false
+
+
