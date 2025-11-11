@@ -185,6 +185,21 @@ fi
 
 COMPOSE="$(compose_bin)"
 
+# ---------------------------
+# Optional: fetch Stockfish
+# ---------------------------
+download_stockfish_linux() {
+  info "Downloading Stockfish (Linux) into ./stockfish via temporary Ubuntu container..."
+  mkdir -p "${ROOT_DIR}/stockfish"
+  # Use an Ubuntu container to install stockfish and copy the binary to host
+  if ! docker run --rm -v "${ROOT_DIR}/stockfish:/out" ubuntu:22.04 bash -lc "set -euo pipefail; apt-get update >/dev/null; DEBIAN_FRONTEND=noninteractive apt-get install -y stockfish >/dev/null; cp /usr/games/stockfish /out/stockfish_binary; chmod +x /out/stockfish_binary"; then
+    err "Failed to obtain Stockfish via Ubuntu container."
+    err "You can try manually placing a Linux stockfish binary at: ${ROOT_DIR}/stockfish/stockfish_binary"
+    return 1
+  fi
+  info "Stockfish saved to ${ROOT_DIR}/stockfish/stockfish_binary"
+}
+
 # Ports
 orig_backend_port="$BACKEND_HOST_PORT"
 orig_frontend_port="$FRONTEND_HOST_PORT"
@@ -219,6 +234,21 @@ cd "$ROOT_DIR"
 mkdir -p "${ROOT_DIR}/data"
 
 STOCKFISH_BIN="${ROOT_DIR}/stockfish/stockfish_binary"
+# Prompt to download Stockfish if missing
+if [[ ! -f "${STOCKFISH_BIN}" ]]; then
+  if [[ -t 0 ]]; then
+    echo
+    read -r -p "Stockfish engine not found locally. Download Linux Stockfish now to \"${STOCKFISH_BIN}\"? [y/N] " _ans
+    if [[ "${_ans}" == "y" || "${_ans}" == "Y" ]]; then
+      download_stockfish_linux || true
+    else
+      info "Skipping Stockfish download. Analysis features may be limited unless the backend image bundles it."
+    fi
+  else
+    info "Stockfish not found and no TTY for prompt; skipping automatic download."
+  fi
+fi
+
 if [[ -f "${STOCKFISH_BIN}" && -x "${STOCKFISH_BIN}" ]]; then
   STOCKFISH_VOLUME="      - \"${ROOT_DIR}/stockfish:/app/stockfish:ro\""
 else
