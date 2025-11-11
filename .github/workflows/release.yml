@@ -1,104 +1,55 @@
-name: Release Docker images
+name: release-bundles
 
 on:
   push:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-  packages: write
-
 jobs:
-  build-and-release:
+  build-and-upload:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Derive image tags
-        id: vars
+      - name: Prepare macOS bundle
         run: |
-          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          TAG="${GITHUB_REF_NAME}"
-          echo "owner=${REPO_OWNER_LOWER}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "backend=ghcr.io/${REPO_OWNER_LOWER}/local-chess-analyzer-backend:${TAG}" >> "$GITHUB_OUTPUT"
-          echo "backend_latest=ghcr.io/${REPO_OWNER_LOWER}/local-chess-analyzer-backend:latest" >> "$GITHUB_OUTPUT"
-          echo "frontend=ghcr.io/${REPO_OWNER_LOWER}/local-chess-analyzer-frontend:${TAG}" >> "$GITHUB_OUTPUT"
-          echo "frontend_latest=ghcr.io/${REPO_OWNER_LOWER}/local-chess-analyzer-frontend:latest" >> "$GITHUB_OUTPUT"
+          mkdir -p dist/macos/scripts
+          cp -a scripts/run-images.sh dist/macos/scripts/
+          cat > dist/macos/Run-LCA.command <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          cd "$(dirname "$0")"
+          chmod +x "./scripts/run-images.sh"
+          bash "./scripts/run-images.sh"
+          read -r -p "Press Return to close..."
+          SH
+          chmod +x dist/macos/Run-LCA.command
+          (cd dist && zip -r LCA-macOS.zip macos)
 
-      - name: Build and push backend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.vars.outputs.backend }}
-            ${{ steps.vars.outputs.backend_latest }}
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.vars.outputs.frontend }}
-            ${{ steps.vars.outputs.frontend_latest }}
-
-      - name: Generate docker-compose for release
+      - name: Prepare Windows bundle
         run: |
-          cat > compose.release.yml <<'YAML'
-          version: '3.8'
+          mkdir -p dist/windows/scripts
+          cp -a scripts/run-images.ps1 dist/windows/scripts/
+          # Also include bash script so Git Bash users can run directly if desired
+          cp -a scripts/run-images.sh dist/windows/scripts/
+          cat > dist/windows/Run-LCA.bat <<'BAT'
+          @echo off
+          powershell -ExecutionPolicy Bypass -File "%~dp0scripts\run-images.ps1"
+          pause
+          BAT
+          (cd dist && zip -r LCA-Windows.zip windows)
 
-          services:
-            backend:
-              image: ${{ steps.vars.outputs.backend }}
-              hostname: backend
-              volumes:
-                - ./data:/app/data
-                - ./stockfish:/app/stockfish
-              restart: unless-stopped
-              ports:
-                - "42069:42069"
-
-            frontend:
-              image: ${{ steps.vars.outputs.frontend }}
-              ports:
-                - "6969:80"
-              depends_on:
-                - backend
-              restart: unless-stopped
-          YAML
+      - name: Checksums
+        run: |
+          cd dist
+          (sha256sum LCA-*.zip > SHA256SUMS.txt) || (shasum -a 256 LCA-*.zip > SHA256SUMS.txt)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
           files: |
-            compose.release.yml
-          body: |
-            Docker images published:
-            - Backend: `${{ steps.vars.outputs.backend }}` (also `latest`)
-            - Frontend: `${{ steps.vars.outputs.frontend }}` (also `latest`)
-
-            Quick start:
-            1) Download `compose.release.yml`
-            2) Run: `docker compose -f compose.release.yml up -d`
-
+            dist/LCA-macOS.zip
+            dist/LCA-Windows.zip
+            dist/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
