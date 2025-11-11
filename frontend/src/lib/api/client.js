@@ -13,8 +13,9 @@ console.log('[API Client] Browser location:', window.location.href);
  */
 async function apiFetch(url, options = {}) {
   try {
-    console.log('[API Client] Fetching:', `${API_BASE_URL}${url}`);
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    const fullUrl = `${API_BASE_URL}${url}`;
+    console.log('[API Client] Fetching:', fullUrl);
+    const response = await fetch(fullUrl, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -23,17 +24,56 @@ async function apiFetch(url, options = {}) {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('[API Client] Error response:', response.status, error);
-      throw new Error(`API Error: ${response.status} - ${error}`);
+      const status = response.status;
+      const contentType = response.headers.get('content-type') || '';
+      let serverMessage = null;
+      try {
+        if (contentType.includes('application/json')) {
+          const json = await response.json();
+          serverMessage = json?.detail || json?.message || null;
+        } else {
+          const text = await response.text();
+          // If body looks like HTML, don't surface raw HTML to users
+          const looksLikeHtml = /<\s*html[\s>]/i.test(text) || /<\s*body[\s>]/i.test(text) || /<[^>]+>/.test(text);
+          serverMessage = looksLikeHtml ? null : (text || null);
+        }
+      } catch {
+        // ignore parsing errors
+      }
+
+      let friendly = '';
+      if (status === 504) {
+        friendly = 'Request timed out (504). The server may be busy or starting. Please try again shortly.';
+      } else if (status === 409) {
+        friendly = serverMessage || 'A sync is already in progress. Please check status or try again soon.';
+      } else if (status >= 500) {
+        friendly = serverMessage ? `Server error (${status}): ${serverMessage}` : 'Server error. Please try again.';
+      } else if (status === 404) {
+        friendly = serverMessage || 'Not found.';
+      } else if (status === 400) {
+        friendly = serverMessage || 'Bad request. Please review your input.';
+      } else if (status === 401 || status === 403) {
+        friendly = serverMessage || 'Not authorized.';
+      } else {
+        friendly = serverMessage ? serverMessage : `Request failed with status ${status}.`;
+      }
+
+      console.error('[API Client] Error response:', status, serverMessage || '(no message)');
+      throw new Error(friendly);
     }
 
     const data = await response.json();
     console.log('[API Client] Success:', data);
     return data;
   } catch (error) {
+    // Normalize network errors
+    if (error?.name === 'TypeError' || /NetworkError/i.test(String(error))) {
+      const message = 'Network error. Please check your connection and that the backend is reachable.';
+      console.error('[API Client] Fetch failed (network):', error);
+      throw new Error(message);
+    }
     console.error('[API Client] Fetch failed:', error);
-    throw error;
+    throw error; // already friendly
   }
 }
 

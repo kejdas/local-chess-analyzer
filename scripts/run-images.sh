@@ -11,7 +11,7 @@ TAG="${TAG:-latest}"
 BACKEND_HOST_PORT="${BACKEND_HOST_PORT:-42069}"
 FRONTEND_HOST_PORT="${FRONTEND_HOST_PORT:-6969}"
 # When set to 1, automatically bump to the next free port if a port is busy.
-AUTO_PORT="${AUTO_PORT:-0}"
+AUTO_PORT="${AUTO_PORT:-1}"
 # Max seconds to wait for health before failing
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-45}"
 
