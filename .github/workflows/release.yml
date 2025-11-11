@@ -25,7 +25,7 @@ jobs:
           2) Click "Open"
           3) Click "Open" again
 
-          Or: System Settings → Privacy & Security → "Run-LCA.command was blocked" → Open Anyway → Open.
+          Or: System Settings → Privacy & Security → Scroll to the bottom to find "Run-LCA.command was blocked" → Open Anyway → Open Anyway.
 
           Terminal alternative (removes quarantine attribute):
           1) cd into the unzipped folder
