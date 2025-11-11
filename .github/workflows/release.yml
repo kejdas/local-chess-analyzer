@@ -15,6 +15,27 @@ jobs:
         run: |
           mkdir -p dist/macos/scripts
           cp -a scripts/run-images.sh dist/macos/scripts/
+          cat > dist/macos/README-FIRST.txt <<'TXT'
+          How to open on macOS (unsigned download)
+
+          Because this app is not signed/notarized with Apple, macOS Gatekeeper may block the first run.
+
+          Easiest (may not work):
+          1) Control-click "Run-LCA.command"
+          2) Click "Open"
+          3) Click "Open" again
+
+          Or: System Settings → Privacy & Security → "Run-LCA.command was blocked" → Open Anyway → Open.
+
+          Terminal alternative (removes quarantine attribute):
+          1) cd into the unzipped folder
+          2) chmod +x "Run-LCA.command"
+          3) xattr -dr com.apple.quarantine "Run-LCA.command" scripts
+          4) open "Run-LCA.command"
+
+          Requirements:
+          - Docker Desktop installed and allowed to run.
+          TXT
           cat > dist/macos/Run-LCA.command <<'SH'
           #!/bin/bash
           set -euo pipefail
@@ -32,6 +53,24 @@ jobs:
           cp -a scripts/run-images.ps1 dist/windows/scripts/
           # Also include bash script so Git Bash users can run directly if desired
           cp -a scripts/run-images.sh dist/windows/scripts/
+          cat > dist/windows/README-FIRST.txt <<'TXT'
+          How to open on Windows (unsigned download)
+
+          SmartScreen may show "Windows protected your PC".
+
+          Easiest:
+          1) Right-click the zip → Properties → Unblock (if present) → OK
+          2) Unzip
+          3) Double-click "Run-LCA.bat"
+          4) If SmartScreen appears, click "More info" → "Run anyway"
+
+          PowerShell policy:
+          - The launcher uses a PowerShell script internally. If your policy blocks scripts,
+            the BAT will still attempt to run it by setting an execution policy for the process only.
+
+          Requirements:
+          - Docker Desktop installed and allowed to run.
+          TXT
           cat > dist/windows/Run-LCA.bat <<'BAT'
           @echo off
           powershell -ExecutionPolicy Bypass -File "%~dp0scripts\run-images.ps1"
@@ -51,5 +90,15 @@ jobs:
             dist/LCA-macOS.zip
             dist/LCA-Windows.zip
             dist/SHA256SUMS.txt
+          body: |
+            Quick start
+            - macOS: unzip LCA-macOS.zip and double‑click Run-LCA.command. If blocked, Control‑click → Open, or see README-FIRST.txt (xattr instructions included).
+            - Windows: unzip LCA-Windows.zip and double‑click Run-LCA.bat. If SmartScreen appears, click More info → Run anyway. See README-FIRST.txt for details.
+
+            Requirements
+            - Docker Desktop installed and running (the launcher will try to start it if possible).
+
+            What it does
+            - Starts backend and frontend Docker images locally, waits for health checks, and opens the app in your default browser.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
