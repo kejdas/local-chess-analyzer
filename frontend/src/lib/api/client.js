@@ -1,9 +1,9 @@
 // API client for backend communication
 
-// Use the hostname from the browser, but change port to backend port
-const API_BASE_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:42069'
-  : `http://${window.location.hostname}:42069`;
+// Prefer relative API calls so the frontend (Nginx) can proxy /api → backend.
+// Allow overriding via Vite env for local dev if needed.
+const API_BASE_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || '';
 
 console.log('[API Client] Using API_BASE_URL:', API_BASE_URL);
 console.log('[API Client] Browser location:', window.location.href);
