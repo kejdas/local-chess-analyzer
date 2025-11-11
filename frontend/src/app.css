@@ -159,6 +159,64 @@ body.theme-dark .analysis-settings p {
   color: #e5e7eb;
 }
 
+/* Sync page (panels, header, status) */
+body.theme-dark .sync-page .header h1 {
+  color: #e5e7eb;
+}
+body.theme-dark .sync-page .header p {
+  color: #9ca3af;
+}
+body.theme-dark .sync-page .panel {
+  background: #111827;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+body.theme-dark .sync-page .row label {
+  color: #e5e7eb;
+}
+body.theme-dark .sync-page .hint {
+  color: #9ca3af;
+}
+body.theme-dark .sync-page .actions button {
+  background: #374151;
+  color: #e5e7eb;
+}
+body.theme-dark .sync-page .actions button.primary {
+  background: #2563eb; /* blue-600 */
+  color: #ffffff;
+}
+body.theme-dark .sync-page .actions button.primary:hover:not(:disabled) {
+  background: #1d4ed8; /* blue-700 */
+}
+body.theme-dark .sync-page .badge.running {
+  background: rgba(16, 185, 129, 0.18);
+  color: #a7f3d0;
+}
+body.theme-dark .sync-page .badge.idle {
+  background: #1f2937;
+  color: #e5e7eb;
+}
+body.theme-dark .sync-page .result.ok {
+  background: #064e3b;
+  border: 1px solid #10b981;
+  color: #d1fae5;
+}
+body.theme-dark .sync-page .result.fail {
+  background: #7f1d1d;
+  border: 1px solid #f87171;
+  color: #fee2e2;
+}
+body.theme-dark .sync-page .alert.success {
+  background: #064e3b;
+  border: 1px solid #10b981;
+  color: #d1fae5;
+}
+body.theme-dark .sync-page .alert.error {
+  background: #7f1d1d;
+  border: 1px solid #f87171;
+  color: #fee2e2;
+}
+
 /* Game view specifics */
 body.theme-dark .eval-score {
   background: #0b1220;
@@ -303,6 +361,9 @@ body.theme-dark .player-cell {
 body.theme-dark .result-cell {
   color: #e5e7eb;
 }
+body.theme-dark .result-draw {
+  color: #ffffff; /* request: white on dark mode for draws */
+}
 body.theme-dark .type-cell {
   color: #e5e7eb;
 }
@@ -327,6 +388,11 @@ body.theme-dark .stat-value {
 }
 body.theme-dark .status {
   background: #0b1220;
+}
+
+/* Sync page: status background override */
+body.theme-dark .sync-page .status {
+  background: #111827;
 }
 body.theme-dark .sync-result.success {
   background: #064e3b;
