@@ -109,8 +109,24 @@
 
   // Reactive: Get current evaluation - update when currentMoveIndex or analysis changes
   $: {
-    if (analysis && currentMoveIndex >= 0 && currentMoveIndex < analysis.moves.length) {
-      currentEvaluation = analysis.moves[currentMoveIndex].analysis;
+    if (analysis) {
+      // Show evaluation AFTER the current move:
+      // - If at starting position (-1), there is no move yet; show eval for first position if desired.
+      // - If 0 <= index < last, use analysis at index+1 (position after the move).
+      // - If at last move, map to terminal result.
+      const lastIdx = analysis.moves.length - 1;
+      if (currentMoveIndex >= 0 && currentMoveIndex < lastIdx) {
+        currentEvaluation = analysis.moves[currentMoveIndex + 1]?.analysis || null;
+      } else if (currentMoveIndex === lastIdx) {
+        const result = game?.result || analysis?.game_info?.result;
+        // Terminal sentinel
+        if (result === '1-0') currentEvaluation = { score_type: 'terminal', score_value: 1 };
+        else if (result === '0-1') currentEvaluation = { score_type: 'terminal', score_value: 0 };
+        else if (result === '1/2-1/2' || result === '½-½') currentEvaluation = { score_type: 'terminal', score_value: 0.5 };
+        else currentEvaluation = null;
+      } else {
+        currentEvaluation = null;
+      }
     } else {
       currentEvaluation = null;
     }
@@ -413,19 +429,37 @@
     }
   }
 
-  // Get evaluation for current move
+  // Get evaluation for current move (post-move evaluation)
   function getCurrentEvaluation() {
-    if (!analysis || currentMoveIndex < 0 || currentMoveIndex >= analysis.moves.length) {
+    if (!analysis) {
       return null;
     }
 
-    const moveAnalysis = analysis.moves[currentMoveIndex];
-    return moveAnalysis.analysis;
+    const lastIdx = analysis.moves.length - 1;
+    if (currentMoveIndex >= 0 && currentMoveIndex < lastIdx) {
+      return analysis.moves[currentMoveIndex + 1]?.analysis || null;
+    }
+    if (currentMoveIndex === lastIdx) {
+      const result = game?.result || analysis?.game_info?.result;
+      if (result === '1-0') return { score_type: 'terminal', score_value: 1 };
+      if (result === '0-1') return { score_type: 'terminal', score_value: 0 };
+      if (result === '1/2-1/2' || result === '½-½') return { score_type: 'terminal', score_value: 0.5 };
+      return null;
+    }
+    // Starting position (-1): no current move
+    return null;
   }
 
   // Format evaluation score
   function formatScore(evaluation) {
     if (!evaluation) return '0.00';
+
+    if (evaluation.score_type === 'terminal') {
+      if (evaluation.score_value === 1) return '1-0';
+      if (evaluation.score_value === 0) return '0-1';
+      if (evaluation.score_value === 0.5) return '½-½';
+      return '—';
+    }
 
     if (evaluation.score_type === 'mate') {
       return `M${evaluation.score_value}`;
@@ -439,6 +473,13 @@
   // Calculate evaluation bar percentage (0-100)
   function getEvalBarPercentage(evaluation) {
     if (!evaluation) return 50; // Equal position
+
+    if (evaluation.score_type === 'terminal') {
+      if (evaluation.score_value === 1) return 100;
+      if (evaluation.score_value === 0) return 0;
+      if (evaluation.score_value === 0.5) return 50;
+      return 50;
+    }
 
     if (evaluation.score_type === 'mate') {
       // Mate scores: positive = white winning, negative = black winning
@@ -639,13 +680,22 @@
                   on:click={() => goToMove(pairIndex * 2)}
                 >
                   {whiteMove.san}
-                  {#if analysis && analysis.moves[pairIndex * 2]}
-                    {@const mv = analysis.moves[pairIndex * 2]}
+                  {#if analysis}
+                    {@const idx = pairIndex * 2}
+                    {@const postEval = (analysis.moves && idx + 1 < analysis.moves.length)
+                      ? analysis.moves[idx + 1].analysis
+                      : (game?.result || analysis?.game_info?.result) === '1-0'
+                        ? { score_type: 'terminal', score_value: 1 }
+                        : (game?.result || analysis?.game_info?.result) === '0-1'
+                          ? { score_type: 'terminal', score_value: 0 }
+                          : ((game?.result || analysis?.game_info?.result) === '1/2-1/2' || (game?.result || analysis?.game_info?.result) === '½-½')
+                            ? { score_type: 'terminal', score_value: 0.5 }
+                            : null}
                     <span class="move-eval" title="Engine evaluation">
-                      {formatScore(mv.analysis)}
+                      {formatScore(postEval)}
                     </span>
-                    {#if mv.classification || mv.special_classification}
-                      {@const icon = classificationIconForMoveIndex(pairIndex * 2)}
+                    {#if analysis.moves && analysis.moves[idx] && (analysis.moves[idx].classification || analysis.moves[idx].special_classification)}
+                      {@const icon = classificationIconForMoveIndex(idx)}
                       {#if icon}
                         <img class="class-inline-icon" src={icon} alt="class" width="16" height="16" />
                       {/if}
@@ -660,13 +710,22 @@
                     on:click={() => goToMove(pairIndex * 2 + 1)}
                   >
                     {blackMove.san}
-                    {#if analysis && analysis.moves[pairIndex * 2 + 1]}
-                      {@const mv = analysis.moves[pairIndex * 2 + 1]}
+                    {#if analysis}
+                      {@const idx = pairIndex * 2 + 1}
+                      {@const postEval = (analysis.moves && idx + 1 < analysis.moves.length)
+                        ? analysis.moves[idx + 1].analysis
+                        : (game?.result || analysis?.game_info?.result) === '1-0'
+                          ? { score_type: 'terminal', score_value: 1 }
+                          : (game?.result || analysis?.game_info?.result) === '0-1'
+                            ? { score_type: 'terminal', score_value: 0 }
+                            : ((game?.result || analysis?.game_info?.result) === '1/2-1/2' || (game?.result || analysis?.game_info?.result) === '½-½')
+                              ? { score_type: 'terminal', score_value: 0.5 }
+                              : null}
                       <span class="move-eval" title="Engine evaluation">
-                        {formatScore(mv.analysis)}
+                        {formatScore(postEval)}
                       </span>
-                      {#if mv.classification || mv.special_classification}
-                        {@const icon = classificationIconForMoveIndex(pairIndex * 2 + 1)}
+                      {#if analysis.moves && analysis.moves[idx] && (analysis.moves[idx].classification || analysis.moves[idx].special_classification)}
+                        {@const icon = classificationIconForMoveIndex(idx)}
                         {#if icon}
                           <img class="class-inline-icon" src={icon} alt="class" width="16" height="16" />
                         {/if}

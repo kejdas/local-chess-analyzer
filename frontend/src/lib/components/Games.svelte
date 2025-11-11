@@ -394,6 +394,35 @@
   onMount(() => {
     loadGames();
   });
+
+  // Helpers for modal: show evaluation AFTER each move for clarity
+  function postEvalForSelectedMove(index) {
+    if (!selectedAnalysis) return null;
+    const movesArr = selectedAnalysis.moves || [];
+    const result = selectedAnalysis.game_info?.result;
+    if (index + 1 < movesArr.length) {
+      return movesArr[index + 1]?.analysis || null;
+    }
+    if (result === '1-0') return { score_type: 'terminal', score_value: 1 };
+    if (result === '0-1') return { score_type: 'terminal', score_value: 0 };
+    if (result === '1/2-1/2' || result === '½-½') return { score_type: 'terminal', score_value: 0.5 };
+    return null;
+  }
+
+  function formatEvalForModal(evaluation) {
+    if (!evaluation) return '0.00';
+    if (evaluation.score_type === 'terminal') {
+      if (evaluation.score_value === 1) return '1-0';
+      if (evaluation.score_value === 0) return '0-1';
+      if (evaluation.score_value === 0.5) return '½-½';
+      return '—';
+    }
+    if (evaluation.score_type === 'mate') {
+      return `M${evaluation.score_value}`;
+    }
+    const score = (evaluation.score_value || 0) / 100;
+    return score >= 0 ? `+${score.toFixed(2)}` : score.toFixed(2);
+  }
 </script>
 
 <div class="games-page">
@@ -752,8 +781,8 @@
                   <div class="move-header">
                     <strong>Move {move.move_number}:</strong>
                     <span class="move-notation">{move.move}</span>
-                    <span class="score {move.analysis.score_type === 'mate' ? 'mate-score' : ''}">
-                      {move.analysis.score}
+                    <span class="score {postEvalForSelectedMove(index) && postEvalForSelectedMove(index).score_type === 'mate' ? 'mate-score' : ''}">
+                      {formatEvalForModal(postEvalForSelectedMove(index))}
                     </span>
                     {#if move.classification || move.special_classification}
                       <!-- Inline classification icon -->
