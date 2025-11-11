@@ -4,6 +4,8 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, field_serializer
 from datetime import datetime
 import asyncio
+from io import StringIO
+import chess.pgn
 
 from ..db.database import get_db_session
 from ..crud import games as crud_games
@@ -33,6 +35,10 @@ class GameResponse(BaseModel):
     import_date: datetime
     analysis_status: str
     has_analysis: bool = False  # Whether analysis file exists
+    # Optional time metadata derived from PGN headers (UTCDate/UTCTime or EndTime)
+    utc_date: Optional[str] = None
+    utc_time: Optional[str] = None
+    game_datetime_utc: Optional[str] = None  # ISO string if available
 
     @field_serializer('import_date')
     def serialize_import_date(self, import_date: datetime, _info):
@@ -59,6 +65,7 @@ async def get_games(
     time_class: Optional[str] = None,
     sort_by: Optional[str] = 'date',
     sort_order: Optional[str] = 'desc',
+    search: Optional[str] = None,
     db: AsyncSession = Depends(get_db_session)
 ):
     """
@@ -94,19 +101,45 @@ async def get_games(
         status=status,
         time_class=time_class,
         sort_by=sort_by,
-        sort_order=sort_order
+        sort_order=sort_order,
+        search=search
     )
     total = await crud_games.get_games_count(
         db,
         date_from=date_from_db,
         date_to=date_to_db,
         status=status,
-        time_class=time_class
+        time_class=time_class,
+        search=search
     )
 
     # Convert to response models and check for analysis files
-    game_responses = []
+    game_responses: list[GameResponse] = []
     for game in games:
+        # Derive UTC date/time from PGN if available
+        utc_date = None
+        utc_time = None
+        game_dt_iso = None
+        try:
+            if game.pgn:
+                g = chess.pgn.read_game(StringIO(game.pgn))
+                if g and g.headers:
+                    utc_date = g.headers.get('UTCDate') or g.headers.get('Date') or None
+                    utc_time = g.headers.get('UTCTime') or g.headers.get('EndTime') or g.headers.get('StartTime') or None
+                    if utc_date and utc_time:
+                        # Normalize separators
+                        d = utc_date.replace('-', '.')
+                        # Compose ISO if parsable
+                        try:
+                            # Chess.com UTCDate format often is YYYY.MM.DD and UTCTime HH:MM:SS
+                            dt = datetime.strptime(f"{d} {utc_time}", "%Y.%m.%d %H:%M:%S")
+                            game_dt_iso = dt.isoformat() + "Z"
+                        except Exception:
+                            game_dt_iso = None
+        except Exception:
+            # Ignore PGN parse errors silently for listing
+            pass
+
         game_dict = {
             "id": game.id,
             "chess_com_id": game.chess_com_id,
@@ -119,7 +152,10 @@ async def get_games(
             "game_date": game.game_date,
             "import_date": game.import_date,
             "analysis_status": game.analysis_status,
-            "has_analysis": has_game_analysis(game.id)
+            "has_analysis": has_game_analysis(game.id),
+            "utc_date": utc_date,
+            "utc_time": utc_time,
+            "game_datetime_utc": game_dt_iso
         }
 
         # Auto-detect: if analysis file exists, status should be "completed"
@@ -129,6 +165,16 @@ async def get_games(
             await crud_games.update_game_analysis_status(db, game.id, "completed")
 
         game_responses.append(GameResponse(**game_dict))
+
+    # Stable tie-breaker: if sorting by date, order same-day games by UTC time when available
+    if sort_by == 'date':
+        def sort_key(gr: GameResponse):
+            # Use game_date and game_datetime_utc; missing times go to start/end depending on order
+            date_part = gr.game_date or ""
+            dt_part = gr.game_datetime_utc or ("0000-01-01T00:00:00Z" if sort_order == 'asc' else "9999-12-31T23:59:59Z")
+            return (date_part, dt_part)
+        reverse = (sort_order != 'asc')
+        game_responses.sort(key=sort_key, reverse=reverse)
 
     return GamesListResponse(
         games=game_responses,
@@ -179,6 +225,26 @@ async def get_game(
         raise HTTPException(status_code=404, detail="Game not found")
 
     # Create response with analysis detection
+    # Derive UTC date/time from PGN if available
+    utc_date = None
+    utc_time = None
+    game_dt_iso = None
+    try:
+        if game.pgn:
+            g = chess.pgn.read_game(StringIO(game.pgn))
+            if g and g.headers:
+                utc_date = g.headers.get('UTCDate') or g.headers.get('Date') or None
+                utc_time = g.headers.get('UTCTime') or g.headers.get('EndTime') or g.headers.get('StartTime') or None
+                if utc_date and utc_time:
+                    d = utc_date.replace('-', '.')
+                    try:
+                        dt = datetime.strptime(f"{d} {utc_time}", "%Y.%m.%d %H:%M:%S")
+                        game_dt_iso = dt.isoformat() + "Z"
+                    except Exception:
+                        game_dt_iso = None
+    except Exception:
+        pass
+
     game_dict = {
         "id": game.id,
         "chess_com_id": game.chess_com_id,
@@ -192,7 +258,10 @@ async def get_game(
         "game_date": game.game_date,
         "import_date": game.import_date,
         "analysis_status": game.analysis_status,
-        "has_analysis": has_game_analysis(game.id)
+        "has_analysis": has_game_analysis(game.id),
+        "utc_date": utc_date,
+        "utc_time": utc_time,
+        "game_datetime_utc": game_dt_iso
     }
 
     # Auto-detect: if analysis file exists, status should be "completed"

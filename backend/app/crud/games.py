@@ -129,7 +129,8 @@ async def get_all_games(
     status: Optional[str] = None,
     time_class: Optional[str] = None,
     sort_by: str = 'date',
-    sort_order: str = 'desc'
+    sort_order: str = 'desc',
+    search: Optional[str] = None
 ) -> List[Game]:
     """
     Get all games with pagination, filters, and sorting.
@@ -158,6 +159,14 @@ async def get_all_games(
         query = query.where(Game.analysis_status == status)
     if time_class:
         query = query.where(Game.time_class == time_class)
+    if search:
+        term = f"%{search.lower()}%"
+        query = query.where(
+            (func.lower(Game.white_player).ilike(term)) |
+            (func.lower(Game.black_player).ilike(term)) |
+            (func.lower(Game.result).ilike(term)) |
+            (func.lower(Game.game_date).ilike(term))
+        )
 
     # Apply sorting
     sort_column = Game.game_date  # Default
@@ -191,7 +200,8 @@ async def get_games_count(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     status: Optional[str] = None,
-    time_class: Optional[str] = None
+    time_class: Optional[str] = None,
+    search: Optional[str] = None
 ) -> int:
     """
     Get total count of games in the database with optional filters.
@@ -217,6 +227,14 @@ async def get_games_count(
     if time_class:
         query = query.where(Game.time_class == time_class)
 
+    if search:
+        term = f"%{search.lower()}%"
+        query = query.where(
+            (func.lower(Game.white_player).ilike(term)) |
+            (func.lower(Game.black_player).ilike(term)) |
+            (func.lower(Game.result).ilike(term)) |
+            (func.lower(Game.game_date).ilike(term))
+        )
     result = await db.execute(query)
     return result.scalar()
 

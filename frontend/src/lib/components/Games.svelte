@@ -39,13 +39,11 @@
   $: totalPages = Math.ceil(total / pageSize);
   $: skip = currentPage * pageSize;
 
-  // Apply client-side filtering (search and result filter)
+  // Apply client-side result filter only. Text search is now server-side.
   $: displayedGames = games.filter(game => {
-    // Result filter (win/loss/draw for the selected player) - must be client-side
     if (resultFilter !== 'all' && playerName.trim()) {
       const isWhite = game.white_player && game.white_player.toLowerCase() === playerName.toLowerCase().trim();
       const isBlack = game.black_player && game.black_player.toLowerCase() === playerName.toLowerCase().trim();
-
       if (resultFilter === 'win') {
         if (isWhite && game.result !== '1-0') return false;
         if (isBlack && game.result !== '0-1') return false;
@@ -56,29 +54,25 @@
         if (!isWhite && !isBlack) return false;
       } else if (resultFilter === 'draw') {
         if (game.result !== '1/2-1/2') return false;
-        // Must be a player in the game
         if (!isWhite && !isBlack) return false;
       }
     }
-
-    // Search filter (case-insensitive text search)
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      const searchableText = [
-        game.white_player,
-        game.black_player,
-        game.result,
-        game.game_date
-      ].join(' ').toLowerCase();
-
-      if (!searchableText.includes(term)) return false;
-    }
-
     return true;
   });
 
   // Track if initial load has happened
   let hasInitialLoad = false;
+
+  // Debounced search term for server-side search
+  let debouncedSearchTerm = '';
+  $: if (hasInitialLoad) {
+    const term = (searchTerm || '').trim();
+    const pending = setTimeout(() => {
+      debouncedSearchTerm = term;
+      currentPage = 0;
+      if (!isAnalysisInProgress) loadGames();
+    }, 300);
+  }
 
   // Reload games when filters change (but not on initial mount)
   $: if (hasInitialLoad && !isAnalysisInProgress && (dateFrom || dateTo || statusFilter !== 'all' || timeClassFilter !== 'all')) {
@@ -101,6 +95,7 @@
       if (dateTo) filters.date_to = dateTo;
       if (statusFilter && statusFilter !== 'all') filters.status = statusFilter;
       if (timeClassFilter && timeClassFilter !== 'all') filters.time_class = timeClassFilter;
+      if (debouncedSearchTerm) filters.search = debouncedSearchTerm;
 
       // Build sort object for API
       const sort = {
@@ -226,6 +221,29 @@
   function formatType(type) {
     if (!type) return 'Other';
     return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  function getResultClass(game) {
+    const name = (playerName || username || '').toLowerCase().trim();
+    if (!name || !game) return '';
+    const white = (game.white_player || '').toLowerCase();
+    const black = (game.black_player || '').toLowerCase();
+    const isWhite = white === name;
+    const isBlack = black === name;
+    const res = game.result;
+    if (!res) return '';
+    if (res === '1-0') {
+      if (isWhite) return 'result-win';
+      if (isBlack) return 'result-loss';
+      return '';
+    }
+    if (res === '0-1') {
+      if (isBlack) return 'result-win';
+      if (isWhite) return 'result-loss';
+      return '';
+    }
+    if (res === '1/2-1/2') return 'result-draw';
+    return '';
   }
 
   function getStatusBadgeClass(status) {
@@ -434,7 +452,7 @@
         on:click={handleSync}
         disabled={syncing || isAnalysisInProgress}
       >
-        {syncing ? 'Syncing...' : 'Fetch New Games'}
+        {syncing ? 'Syncing...' : 'Fetch ALL games'}
       </button>
       <button
         class="sync-btn analyze-page-btn"
@@ -586,7 +604,7 @@
     <div class="empty">
       {#if total === 0}
         <h2>No games yet</h2>
-        <p>Click "Fetch New Games" to import your games from Chess.com</p>
+        <p>Click "Fetch ALL games" to import your games from Chess.com</p>
       {:else}
         <h2>No matching games</h2>
         <p>Try adjusting your search or filters</p>
@@ -660,7 +678,9 @@
                   <span class="rating">({game.black_rating})</span>
                 {/if}
               </td>
-              <td class="result-cell">{game.result || 'N/A'}</td>
+              <td class="result-cell">
+                <span class={getResultClass(game)}>{game.result || 'N/A'}</span>
+              </td>
               <td class="type-cell">{formatType(game.time_class)}</td>
               <td class="status-cell">
                 <span class="status-badge {getStatusBadgeClass(getEffectiveStatus(game))}">
@@ -787,24 +807,24 @@
                     {#if move.classification || move.special_classification}
                       <!-- Inline classification icon -->
                       {#if move.special_classification && move.special_classification.toLowerCase() === 'brilliant'}
-                        <img class="class-inline-icon" src="../../assets/classifications/brilliant.png" alt="brilliant" width="16" height="16" />
+                        <img class="class-inline-icon" src="../../assets/classifications/brilliant.png" alt="brilliant" width="24" height="24" />
                       {:else if move.special_classification && (move.special_classification.toLowerCase() === 'great move' || move.special_classification.toLowerCase() === 'great')}
-                        <img class="class-inline-icon" src="../../assets/classifications/great.png" alt="great move" width="16" height="16" />
+                        <img class="class-inline-icon" src="../../assets/classifications/great.png" alt="great move" width="24" height="24" />
                       {:else if move.special_classification && move.special_classification.toLowerCase() === 'miss'}
-                        <img class="class-inline-icon" src="../../assets/classifications/miss.png" alt="miss" width="16" height="16" />
+                        <img class="class-inline-icon" src="../../assets/classifications/miss.png" alt="miss" width="24" height="24" />
                       {:else}
                         {#if move.classification && move.classification.toLowerCase() === 'best'}
-                          <img class="class-inline-icon" src="../../assets/classifications/best.png" alt="best" width="16" height="16" />
+                          <img class="class-inline-icon" src="../../assets/classifications/best.png" alt="best" width="24" height="24" />
                         {:else if move.classification && move.classification.toLowerCase() === 'excellent'}
-                          <img class="class-inline-icon" src="../../assets/classifications/excellent.png" alt="excellent" width="16" height="16" />
+                          <img class="class-inline-icon" src="../../assets/classifications/excellent.png" alt="excellent" width="24" height="24" />
                         {:else if move.classification && move.classification.toLowerCase() === 'good'}
-                          <img class="class-inline-icon" src="../../assets/classifications/good.png" alt="good" width="16" height="16" />
+                          <img class="class-inline-icon" src="../../assets/classifications/good.png" alt="good" width="24" height="24" />
                         {:else if move.classification && move.classification.toLowerCase() === 'inaccuracy'}
-                          <img class="class-inline-icon" src="../../assets/classifications/inaccuracy.png" alt="inaccuracy" width="16" height="16" />
+                          <img class="class-inline-icon" src="../../assets/classifications/inaccuracy.png" alt="inaccuracy" width="24" height="24" />
                         {:else if move.classification && move.classification.toLowerCase() === 'mistake'}
-                          <img class="class-inline-icon" src="../../assets/classifications/mistake.png" alt="mistake" width="16" height="16" />
+                          <img class="class-inline-icon" src="../../assets/classifications/mistake.png" alt="mistake" width="24" height="24" />
                         {:else if move.classification && move.classification.toLowerCase() === 'blunder'}
-                          <img class="class-inline-icon" src="../../assets/classifications/blunder.png" alt="blunder" width="16" height="16" />
+                          <img class="class-inline-icon" src="../../assets/classifications/blunder.png" alt="blunder" width="24" height="24" />
                         {/if}
                       {/if}
                     {/if}
@@ -1176,6 +1196,13 @@
     font-weight: 600;
     color: #34495e;
   }
+  .result-win {
+    color: #16a34a; /* green-600 */
+  }
+  .result-loss {
+    color: #ef4444; /* red-500 */
+  }
+  /* Draw inherits default color in light theme; dark theme override in app.css */
 
   .status-header {
     text-align: center;
